@@ -1,16 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Truck, UserPlus, LogIn, Languages } from 'lucide-react';
+import { Truck, UserPlus, LogIn, Languages, Shield, Lock, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import bannerImage from '../assets/images/fleet_ledger_banner_1790516387387.jpg';
 
 interface AuthViewProps {
   onOpenDatabaseModal?: () => void;
+  onOpenAdminFleetManagement?: () => void;
 }
 
-export const AuthView: React.FC<AuthViewProps> = () => {
+export const AuthView: React.FC<AuthViewProps> = ({ onOpenAdminFleetManagement }) => {
   const { t, toggleLanguage, isBangla } = useLanguage();
   const [isRegister, setIsRegister] = useState(false);
+
+  // Intercept mobile hardware back button when in Register tab so it returns to Login instead of leaving the website
+  useEffect(() => {
+    if (isRegister) {
+      try {
+        window.history.pushState({ authSubView: 'register' }, '');
+      } catch {}
+    }
+    const handlePopState = () => {
+      if (isRegister) {
+        setIsRegister(false);
+        setMessage(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isRegister]);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleRegisterNumber, setVehicleRegisterNumber] = useState('');
   const [name, setName] = useState('');
@@ -110,6 +128,23 @@ export const AuthView: React.FC<AuthViewProps> = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 sm:py-12 px-3 sm:px-6 lg:px-8 relative">
+      {/* Mobile Back Button (Shown ONLY when in Register sub-view, hidden on root Login view so it never exits to external site) */}
+      {isRegister && (
+        <div className="fixed top-4 left-4 z-20 md:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setIsRegister(false);
+              setMessage(null);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 shadow-xs transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-blue-600" />
+            <span>{isBangla ? 'লগইনে ফিরুন' : 'Back'}</span>
+          </button>
+        </div>
+      )}
+
       {/* Language Switcher in top corner */}
       <div className="absolute top-4 right-4 z-20">
         <button
@@ -316,6 +351,41 @@ export const AuthView: React.FC<AuthViewProps> = () => {
             </div>
           </form>
         </div>
+
+        {/* Admin Fleet Management Box Bar Under Login Page */}
+        {onOpenAdminFleetManagement && (
+          <div className="mt-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-3.5 sm:p-4 shadow-lg text-white flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0">
+                <Shield className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs sm:text-sm font-extrabold tracking-tight text-white">
+                    {isBangla ? 'অ্যাডমিন ফ্লিট ম্যানেজমেন্ট' : 'Admin Fleet Management'}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 shrink-0">
+                    {isBangla ? 'সুরক্ষিত' : 'Protected'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                  {isBangla
+                    ? 'সকল নিবন্ধিত গাড়ি, চালকের হিসাব ও অডিট পরিচালনা করুন'
+                    : 'Manage all registered vehicles, driver ledgers & fleet audits'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenAdminFleetManagement}
+              className="px-3 sm:px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>{isBangla ? 'প্রবেশ করুন' : 'Open'}</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Languages,
   Lock,
+  ArrowLeft,
 } from 'lucide-react';
 import { Profile } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -28,6 +29,8 @@ interface HeaderProps {
   onLockAdmin?: () => void;
   onOpenDatabaseModal?: () => void;
   onPrint?: () => void;
+  canGoBack?: boolean;
+  onBack?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,6 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   isAdminUnlocked = false,
   onOpenAdminPasswordModal,
   onLockAdmin,
+  canGoBack = false,
+  onBack,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -81,14 +86,25 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 no-print shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
-          {/* Brand & Vehicle Badge */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Left: Mobile Back Button (shown only when inside a sub-page, hidden at root) + Brand & Vehicle Badge */}
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {canGoBack && onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-extrabold transition-colors shrink-0 shadow-2xs"
+                title={isBangla ? 'আগের পেজে ফিরে যান' : 'Go back to previous page'}
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>{isBangla ? 'পেছনে' : 'Back'}</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('ledger')}
-              className="text-left font-black text-base sm:text-xl tracking-wider text-slate-900 hover:text-blue-600 transition-colors flex items-center gap-1.5"
+              className="text-left font-black text-sm sm:text-xl tracking-wider text-slate-900 hover:text-blue-600 transition-colors flex items-center gap-1.5 truncate"
             >
-              <Truck className="w-5 h-5 text-blue-600 shrink-0" />
-              <span className="inline font-black tracking-wider">FLEET-LEDGER</span>
+              <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 shrink-0" />
+              <span className="inline font-black tracking-wider truncate">FLEET-LEDGER</span>
             </button>
             <span className="text-[11px] font-mono-tabular px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 font-bold truncate max-w-[100px] sm:max-w-none">
               {profile.vehicle_number}

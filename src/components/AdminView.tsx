@@ -16,9 +16,17 @@ interface AdminViewProps {
   currentAdmin: Profile;
   onLogout: () => void;
   onLockAdmin?: () => void;
+  onSubViewChange?: (hasSelectedUser: boolean) => void;
+  backSignal?: number;
 }
 
-export const AdminView: React.FC<AdminViewProps> = ({ currentAdmin, onLogout, onLockAdmin }) => {
+export const AdminView: React.FC<AdminViewProps> = ({
+  currentAdmin,
+  onLogout,
+  onLockAdmin,
+  onSubViewChange,
+  backSignal = 0,
+}) => {
   const { t, isBangla } = useLanguage();
   const [users, setUsers] = useState<Profile[]>([]);
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
@@ -73,7 +81,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentAdmin, onLogout, on
     if (selectedUser) {
       loadUserRecords(selectedUser.id);
     }
+    onSubViewChange?.(Boolean(selectedUser));
   }, [selectedUser, from, to]);
+
+  useEffect(() => {
+    if (backSignal > 0 && selectedUser) {
+      setSelectedUser(null);
+      setEditingRecord(null);
+    }
+  }, [backSignal]);
 
   const handleSelectUser = (user: Profile) => {
     setSelectedUser(user);

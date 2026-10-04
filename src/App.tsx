@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 import { Profile } from './types';
 import { AuthView } from './components/AuthView';
@@ -9,12 +9,26 @@ import { PdfGenerateView } from './components/PdfGenerateView';
 import { MonthlyOverview } from './components/MonthlyOverview';
 import { AdminPasswordGate } from './components/AdminPasswordGate';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
+import { ArrowLeft, Shield, Lock, Truck } from 'lucide-react';
+
+const STANDALONE_ADMIN_PROFILE: Profile = {
+  id: 'admin-master-portal',
+  vehicle_number: 'ADMIN',
+  name: 'Fleet Administrator',
+  phone: '',
+  role: 'admin',
+};
 
 function FleetLedgerApp() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<AppTab>('ledger');
+  const [activeTab, setActiveTabState] = useState<AppTab>('ledger');
+  const [tabHistory, setTabHistory] = useState<AppTab[]>([]);
+  const [adminHasSelectedUser, setAdminHasSelectedUser] = useState<boolean>(false);
+  const [adminBackSignal, setAdminBackSignal] = useState<number>(0);
+  const [standaloneAdminMode, setStandaloneAdminMode] = useState<boolean>(false);
+
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('fleet_admin_unlocked') === 'true';
@@ -23,7 +37,78 @@ function FleetLedgerApp() {
     }
   });
   const [showAdminPasswordModal, setShowAdminPasswordModal] = useState<boolean>(false);
+  const [pendingStandaloneAdmin, setPendingStandaloneAdmin] = useState<boolean>(false);
   const { isBangla } = useLanguage();
+
+  const setActiveTab = useCallback(
+    (nextTab: AppTab) => {
+      setActiveTabState(prev => {
+        if (prev !== nextTab) {
+          setTabHistory(h => [...h, prev]);
+          try {
+            window.history.pushState({ fleetInternal: true, tab: nextTab }, '');
+          } catch {}
+        }
+        return nextTab;
+      });
+    },
+    []
+  );
+
+  // Determine whether there is an internal view to go back to inside our website
+  const canGoBack =
+    adminHasSelectedUser || standaloneAdminMode || activeTab !== 'ledger';
+
+  const handleInAppBack = useCallback(() => {
+    if (adminHasSelectedUser) {
+      setAdminBackSignal(s => s + 1);
+      setAdminHasSelectedUser(false);
+      return;
+    }
+    if (standaloneAdminMode) {
+      setStandaloneAdminMode(false);
+      return;
+    }
+    if (tabHistory.length > 0) {
+      const nextHistory = [...tabHistory];
+      const prevTab = nextHistory.pop() || 'ledger';
+      setTabHistory(nextHistory);
+      setActiveTabState(prevTab);
+      return;
+    }
+    if (activeTab !== 'ledger') {
+      setActiveTabState('ledger');
+    }
+  }, [adminHasSelectedUser, standaloneAdminMode, tabHistory, activeTab]);
+
+  // Keep a ref to latest back handler for browser/mobile hardware popstate interception
+  const backHandlerRef = useRef(handleInAppBack);
+  const canGoBackRef = useRef(canGoBack);
+  useEffect(() => {
+    backHandlerRef.current = handleInAppBack;
+    canGoBackRef.current = canGoBack;
+  }, [handleInAppBack, canGoBack]);
+
+  // Guard browser history so pressing mobile hardware Back stays inside the website instead of jumping to an external web page
+  useEffect(() => {
+    try {
+      window.history.replaceState({ fleetRoot: true }, '');
+      window.history.pushState({ fleetGuard: true }, '');
+    } catch {}
+
+    const onPopState = () => {
+      if (canGoBackRef.current) {
+        backHandlerRef.current();
+      }
+      // Re-push guard state so mobile back button never exits our site to another external site
+      try {
+        window.history.pushState({ fleetGuard: true }, '');
+      } catch {}
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -35,9 +120,8 @@ function FleetLedgerApp() {
 
       if (data) {
         setProfile(data);
-        // Clear admin section for everyone by default: always land on daily ledger
-        setActiveTab('ledger');
-        // Log in login_history
+        setActiveTabState('ledger');
+        setTabHistory([]);
         await supabase.from('login_history').insert({ user_id: userId });
       } else {
         console.warn('Profile not found:', error);
@@ -64,6 +148,7 @@ function FleetLedgerApp() {
       (_event: string, newSession: any) => {
         setSession(newSession);
         if (newSession?.user) {
+          setStandaloneAdminMode(false);
           fetchProfile(newSession.user.id);
         } else {
           setProfile(null);
@@ -83,6 +168,9 @@ function FleetLedgerApp() {
     } catch {}
     setIsAdminUnlocked(false);
     setShowAdminPasswordModal(false);
+    setStandaloneAdminMode(false);
+    setAdminHasSelectedUser(false);
+    setTabHistory([]);
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
@@ -92,17 +180,34 @@ function FleetLedgerApp() {
     if (isAdminUnlocked) {
       setActiveTab('admin');
     } else {
+      setPendingStandaloneAdmin(false);
+      setShowAdminPasswordModal(true);
+    }
+  };
+
+  const handleOpenAdminFromLogin = () => {
+    if (isAdminUnlocked) {
+      setStandaloneAdminMode(true);
+      try {
+        window.history.pushState({ fleetInternal: true, standaloneAdmin: true }, '');
+      } catch {}
+    } else {
+      setPendingStandaloneAdmin(true);
       setShowAdminPasswordModal(true);
     }
   };
 
   const handleLockAdmin = () => {
     setIsAdminUnlocked(false);
+    setAdminHasSelectedUser(false);
     try {
       sessionStorage.removeItem('fleet_admin_unlocked');
     } catch {}
+    if (standaloneAdminMode) {
+      setStandaloneAdminMode(false);
+    }
     if (activeTab === 'admin') {
-      setActiveTab('ledger');
+      setActiveTabState('ledger');
     }
   };
 
@@ -119,14 +224,85 @@ function FleetLedgerApp() {
     );
   }
 
+  // Standalone Admin Fleet Management view opened directly from the Login page
+  if ((!session || !profile) && standaloneAdminMode && isAdminUnlocked) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
+        <header className="sticky top-0 z-40 bg-slate-900 text-white border-b border-slate-800 no-print shadow-sm">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={handleInAppBack}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg text-xs font-bold transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isBangla ? 'পেছনে যান' : 'Back'}</span>
+              </button>
+              <div className="flex items-center gap-1.5 truncate">
+                <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
+                <span className="font-black text-sm sm:text-lg tracking-wider truncate">
+                  FLEET-LEDGER
+                </span>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-400/30 rounded hidden xs:inline-block">
+                  {isBangla ? 'অ্যাডমিন পোর্টাল' : 'Admin Portal'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLockAdmin}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-lg transition-colors shrink-0"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>{isBangla ? 'লগইন পেজে ফিরুন' : 'Exit to Log In'}</span>
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1">
+          <AdminView
+            currentAdmin={STANDALONE_ADMIN_PROFILE}
+            onLogout={handleLockAdmin}
+            onLockAdmin={handleLockAdmin}
+            onSubViewChange={setAdminHasSelectedUser}
+            backSignal={adminBackSignal}
+          />
+        </main>
+      </div>
+    );
+  }
+
   // Not authenticated
   if (!session || !profile) {
-    return <AuthView />;
+    return (
+      <>
+        <AuthView onOpenAdminFleetManagement={handleOpenAdminFromLogin} />
+        {showAdminPasswordModal && (
+          <AdminPasswordGate
+            isModal={true}
+            onSuccess={() => {
+              setIsAdminUnlocked(true);
+              setShowAdminPasswordModal(false);
+              if (pendingStandaloneAdmin) {
+                setStandaloneAdminMode(true);
+                setPendingStandaloneAdmin(false);
+              }
+            }}
+            onCancel={() => {
+              setShowAdminPasswordModal(false);
+              setPendingStandaloneAdmin(false);
+            }}
+          />
+        )}
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
-      {/* Top Header with Menu Bar */}
+      {/* Top Header with Mobile Back Button (shown only when inside a sub-view, hidden at root) & Menu Bar */}
       <Header
         profile={profile}
         activeTab={activeTab}
@@ -136,6 +312,8 @@ function FleetLedgerApp() {
         onOpenAdminPasswordModal={handleOpenAdminPasswordModal}
         onLockAdmin={handleLockAdmin}
         onPrint={() => window.print()}
+        canGoBack={canGoBack}
+        onBack={handleInAppBack}
       />
 
       {/* Main View Area */}
@@ -146,6 +324,8 @@ function FleetLedgerApp() {
               currentAdmin={profile}
               onLogout={handleLogout}
               onLockAdmin={handleLockAdmin}
+              onSubViewChange={setAdminHasSelectedUser}
+              backSignal={adminBackSignal}
             />
           ) : (
             <AdminPasswordGate
@@ -154,7 +334,7 @@ function FleetLedgerApp() {
                 setShowAdminPasswordModal(false);
               }}
               onCancel={() => {
-                setActiveTab('ledger');
+                setActiveTabState('ledger');
                 setShowAdminPasswordModal(false);
               }}
             />
