@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == "trustservice26@gmail.com" ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Profiles collection: Vehicle driver profiles
+    match /profiles/{profileId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Daily financial records
+    match /daily_records/{recordId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Login history across devices
+    match /login_history/{historyId} {
+      allow read, create, update, delete: if true;
+    }
+
+    // Admins registry
+    match /admins/{adminId} {
+      allow read, write: if true;
+    }
+
+    // Default safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "Commercial vehicle driver or administrator profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique profile identifier" },
+        "vehicle_number": { "type": "string", "description": "Commercial vehicle registration license number" },
+        "name": { "type": "string", "description": "Driver or owner name" },
+        "phone": { "type": "string", "description": "Contact telephone number" },
+        "password": { "type": "string", "description": "Login password hash or token" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "Role permissions" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "vehicle_number", "name", "role"]
+    },
+    "DailyRecord": {
+      "title": "DailyRecord",
+      "description": "Daily commercial trip revenue, fuel costs, tolls, and operating expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique daily transaction record ID" },
+        "user_id": { "type": "string", "description": "Foreign key reference to profile ID" },
+        "record_date": { "type": "string", "description": "Date of the ledger record YYYY-MM-DD" },
+        "income": { "type": "number", "description": "Gross fare or trip revenue" },
+        "income_details": { "type": "string", "description": "Trip notes, route or passenger details" },
+        "cost": { "type": "number", "description": "Direct fuel, diesel, or gas expense" },
+        "cost_location": { "type": "string", "description": "Fuel station name or highway location" },
+        "cost_details": { "type": "string", "description": "Litres, fuel grade or meter reading" },
+        "other": { "type": "number", "description": "Expressway toll, parking, or maintenance expense" },
+        "other_details": { "type": "string", "description": "Toll plaza name, repair notes or receipt" },
+        "created_at": { "type": "string", "description": "Timestamp when logged" }
+      },
+      "required": ["id", "user_id", "record_date", "income", "cost", "other"]
+    },
+    "LoginHistory": {
+      "title": "LoginHistory",
+      "description": "Audit track of logins across user devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Login history entry ID" },
+        "user_id": { "type": "string", "description": "User ID who signed in" },
+        "logged_in_at": { "type": "string", "description": "Sign-in timestamp" }
+      },
+      "required": ["user_id", "logged_in_at"]
+    }
+  },
+  "firestore": {
+    "/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Stores vehicle registrations and driver profiles online"
+    },
+    "/daily_records/{recordId}": {
+      "schema": "DailyRecord",
+      "description": "Stores all daily trip income and operational expenses online"
+    },
+    "/login_history/{historyId}": {
+      "schema": "LoginHistory",
+      "description": "Stores sign-in activity across devices online"
+    }
+  }
+}

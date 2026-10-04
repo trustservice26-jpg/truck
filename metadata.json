@@ -1,0 +1,6 @@
+{
+  "name": "FleetLedger - Vehicle Income & Cost Tracker",
+  "description": "Comprehensive daily income, expense, and cost management system for commercial vehicle drivers and fleet managers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
