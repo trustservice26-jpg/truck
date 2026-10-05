@@ -89,25 +89,27 @@ function FleetLedgerApp() {
     canGoBackRef.current = canGoBack;
   }, [handleInAppBack, canGoBack]);
 
-  // Guard browser history so pressing mobile hardware Back stays inside the website instead of jumping to an external web page
+  // Clean mobile history & BFCache handling so pressing Back or closing/reopening on any phone never freezes
   useEffect(() => {
-    try {
-      window.history.replaceState({ fleetRoot: true }, '');
-      window.history.pushState({ fleetGuard: true }, '');
-    } catch {}
-
     const onPopState = () => {
       if (canGoBackRef.current) {
         backHandlerRef.current();
       }
-      // Re-push guard state so mobile back button never exits our site to another external site
-      try {
-        window.history.pushState({ fleetGuard: true }, '');
-      } catch {}
+    };
+
+    // Recover cleanly if mobile browser restores page from Back-Forward Cache (BFCache) after closing/cutting tab
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setLoading(false);
+      }
     };
 
     window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('pageshow', onPageShow);
+    };
   }, []);
 
   const fetchProfile = async (userId: string, fallbackUser?: Profile) => {
