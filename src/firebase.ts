@@ -1,7 +1,21 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+// Built-in fallback config so external deployments (e.g. Vercel / GitHub export)
+// work seamlessly even if firebase-applet-config.json is not included in the Git export.
+const firebaseConfig = {
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'inbound-approach-r6ppv',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:234533909903:web:b00112650cbe13421907fa',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCu3zzr2C05rA4MNj2Y54NzH6yC6Fqmmjc',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'inbound-approach-r6ppv.firebaseapp.com',
+  firestoreDatabaseId:
+    import.meta.env.VITE_FIREBASE_DATABASE_ID ||
+    'ai-studio-fleetledgervehic-91ad5514-dc8e-4625-89a2-d94329b7ee1b',
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'inbound-approach-r6ppv.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '234533909903',
+};
 
 // Initialize the online Firebase applet
 export const app = initializeApp(firebaseConfig);
@@ -32,7 +46,11 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
