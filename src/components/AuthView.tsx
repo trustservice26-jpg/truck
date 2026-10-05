@@ -2,7 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Truck, UserPlus, LogIn, Languages, Shield, Lock, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import bannerImage from '../assets/images/fleet_ledger_banner_1790516387387.jpg';
+
+const BANNER_SVG_DATA_URI =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" width="100%" height="100%">
+      <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#0f172a"/>
+          <stop offset="50%" stop-color="#1e3a8a"/>
+          <stop offset="100%" stop-color="#0f172a"/>
+        </linearGradient>
+        <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#10b981" stop-opacity="0.15"/>
+        </linearGradient>
+      </defs>
+      <rect width="800" height="260" fill="url(#bg)"/>
+      <path d="M0 190 Q250 140 500 185 T800 160 L800 260 L0 260 Z" fill="url(#accent)"/>
+      <g stroke="#38bdf8" stroke-opacity="0.15" stroke-width="1">
+        <line x1="0" y1="65" x2="800" y2="65"/>
+        <line x1="0" y1="130" x2="800" y2="130"/>
+        <line x1="0" y1="195" x2="800" y2="195"/>
+        <line x1="200" y1="0" x2="200" y2="260"/>
+        <line x1="400" y1="0" x2="400" y2="260"/>
+        <line x1="600" y1="0" x2="600" y2="260"/>
+      </g>
+      <g transform="translate(520, 58)" fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.45">
+        <rect x="0" y="20" width="130" height="75" rx="6" fill="#1e293b"/>
+        <path d="M130 42 H175 L195 68 V95 H130 Z" fill="#1e293b"/>
+        <circle cx="38" cy="100" r="16" fill="#0f172a" stroke="#93c5fd" stroke-width="4"/>
+        <circle cx="162" cy="100" r="16" fill="#0f172a" stroke="#93c5fd" stroke-width="4"/>
+      </g>
+    </svg>
+  `);
 
 interface AuthViewProps {
   onOpenDatabaseModal?: () => void;
@@ -174,10 +207,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onOpenAdminFleetManagement }
           {/* Hero Fleet Visual Header */}
           <div className="relative -mx-4 -mt-6 sm:-mx-10 sm:-mt-8 mb-5 h-32 sm:h-36 overflow-hidden bg-slate-900">
             <img
-              src={bannerImage}
+              src={BANNER_SVG_DATA_URI}
               alt="Commercial vehicle fleet operations"
-              className="w-full h-full object-cover opacity-80"
-              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover opacity-90"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent flex items-end p-4 sm:p-5">
               <div className="text-white">
