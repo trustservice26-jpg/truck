@@ -660,6 +660,24 @@ class CloudQueryBuilder {
       }
     }
 
+    try {
+      if (this.tableName === 'profiles') {
+        const cached: any[] = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+        const matchedIds = new Set(matchingDocs.map(m => String(m._docId || m.id)));
+        const updated = cached.map(c =>
+          matchedIds.has(String(c._docId || c.id)) ? { ...c, ...payload } : c
+        );
+        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updated));
+      } else if (this.tableName === 'daily_records') {
+        const cached: any[] = JSON.parse(localStorage.getItem(LOCAL_RECORDS_KEY) || '[]');
+        const matchedIds = new Set(matchingDocs.map(m => String(m._docId || m.id)));
+        const updated = cached.map(c =>
+          matchedIds.has(String(c._docId || c.id)) ? { ...c, ...payload } : c
+        );
+        localStorage.setItem(LOCAL_RECORDS_KEY, JSON.stringify(updated));
+      }
+    } catch {}
+
     return { data: matchingDocs.map(m => ({ ...m, ...payload })), error: null };
   }
 

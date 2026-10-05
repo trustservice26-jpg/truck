@@ -10,15 +10,25 @@ export function formatNumber(amount: number | string | undefined | null): string
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+export function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function getTodayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 export function getFirstDayOfMonthStr(): string {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}-01`;
+  return formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
+}
+
+export function getLastDayOfMonthStr(): string {
+  const now = new Date();
+  return formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 }
 
 export function getLastMonthRange(): { from: string; to: string } {
@@ -26,18 +36,17 @@ export function getLastMonthRange(): { from: string; to: string } {
   const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
   return {
-    from: firstDayLastMonth.toISOString().slice(0, 10),
-    to: lastDayLastMonth.toISOString().slice(0, 10),
+    from: formatLocalDate(firstDayLastMonth),
+    to: formatLocalDate(lastDayLastMonth),
   };
 }
 
 export function getLast7DaysRange(): { from: string; to: string } {
   const now = new Date();
-  const past7 = new Date();
-  past7.setDate(now.getDate() - 7);
+  const past7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
   return {
-    from: past7.toISOString().slice(0, 10),
-    to: now.toISOString().slice(0, 10),
+    from: formatLocalDate(past7),
+    to: formatLocalDate(now),
   };
 }
 

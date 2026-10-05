@@ -9,6 +9,7 @@ import {
   formatCurrency,
   getTodayStr,
   getFirstDayOfMonthStr,
+  getLastDayOfMonthStr,
   getLastMonthRange,
   getLast7DaysRange,
   exportRecordsToCSV,
@@ -56,17 +57,22 @@ export const UserView: React.FC<UserViewProps> = ({
 
   // Date filters
   const [from, setFrom] = useState<string>(getFirstDayOfMonthStr());
-  const [to, setTo] = useState<string>(getTodayStr());
+  const [to, setTo] = useState<string>(getLastDayOfMonthStr());
+  const [activePreset, setActivePreset] = useState<
+    'thisMonth' | 'lastMonth' | 'last7Days' | 'today' | 'allTime' | 'custom'
+  >('thisMonth');
 
   // Load records
-  const loadRecords = async () => {
+  const loadRecords = async (customFrom?: string, customTo?: string) => {
+    const startRange = customFrom ?? from;
+    const endRange = customTo ?? to;
     setLoading(true);
     const { data, x } = await supabase
       .from('daily_records')
       .select('*')
       .eq('user_id', profile.id)
-      .gte('record_date', from)
-      .lte('record_date', to)
+      .gte('record_date', startRange)
+      .lte('record_date', endRange)
       .order('record_date', { ascending: false });
 
     setRecords(data || x || []);
@@ -74,8 +80,39 @@ export const UserView: React.FC<UserViewProps> = ({
   };
 
   useEffect(() => {
-    loadRecords();
+    loadRecords(from, to);
   }, [profile.id, from, to]);
+
+  const applyDatePreset = (
+    preset: 'thisMonth' | 'lastMonth' | 'last7Days' | 'today' | 'allTime'
+  ) => {
+    let nextFrom = from;
+    let nextTo = to;
+
+    if (preset === 'thisMonth') {
+      nextFrom = getFirstDayOfMonthStr();
+      nextTo = getLastDayOfMonthStr();
+    } else if (preset === 'lastMonth') {
+      const range = getLastMonthRange();
+      nextFrom = range.from;
+      nextTo = range.to;
+    } else if (preset === 'last7Days') {
+      const range = getLast7DaysRange();
+      nextFrom = range.from;
+      nextTo = range.to;
+    } else if (preset === 'today') {
+      nextFrom = getTodayStr();
+      nextTo = getTodayStr();
+    } else if (preset === 'allTime') {
+      nextFrom = '2000-01-01';
+      nextTo = '2099-12-31';
+    }
+
+    setActivePreset(preset);
+    setFrom(nextFrom);
+    setTo(nextTo);
+    loadRecords(nextFrom, nextTo);
+  };
 
   const handleSaveRecord = async (
     payload: Omit<DailyRecord, 'id' | 'created_at'>
@@ -91,7 +128,11 @@ export const UserView: React.FC<UserViewProps> = ({
       const { error } = await supabase.from('daily_records').insert(payload);
       if (error) return error.message;
     }
-    loadRecords();
+    const nextFrom = payload.record_date < from ? payload.record_date : from;
+    const nextTo = payload.record_date > to ? payload.record_date : to;
+    if (nextFrom !== from) setFrom(nextFrom);
+    if (nextTo !== to) setTo(nextTo);
+    loadRecords(nextFrom, nextTo);
     return null;
   };
 
@@ -106,13 +147,12 @@ export const UserView: React.FC<UserViewProps> = ({
     } catch (err) {
       console.error('Failed to execute delete on record:', err);
     } finally {
-      loadRecords();
+      loadRecords(from, to);
     }
   };
 
   const handleClearFilters = () => {
-    setFrom(getFirstDayOfMonthStr());
-    setTo(getTodayStr());
+    applyDatePreset('thisMonth');
   };
 
   // Calculate summary stats
@@ -246,7 +286,10 @@ export const UserView: React.FC<UserViewProps> = ({
                 <input
                   type="date"
                   value={from}
-                  onChange={e => setFrom(e.target.value)}
+                  onChange={e => {
+                    setActivePreset('custom');
+                    setFrom(e.target.value);
+                  }}
                   className="w-full sm:w-auto px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -256,7 +299,10 @@ export const UserView: React.FC<UserViewProps> = ({
                 <input
                   type="date"
                   value={to}
-                  onChange={e => setTo(e.target.value)}
+                  onChange={e => {
+                    setActivePreset('custom');
+                    setTo(e.target.value);
+                  }}
                   className="w-full sm:w-auto px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -264,12 +310,14 @@ export const UserView: React.FC<UserViewProps> = ({
 
             <div className="flex items-center gap-2 mt-2 sm:mt-3 w-full sm:w-auto">
               <button
-                onClick={loadRecords}
+                type="button"
+                onClick={() => loadRecords(from, to)}
                 className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors text-center"
               >
                 {isBangla ? 'প্রয়োগ' : 'Apply'}
               </button>
               <button
+                type="button"
                 onClick={handleClearFilters}
                 className="flex-1 sm:flex-none px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors text-center border border-slate-200 sm:border-transparent"
               >
@@ -280,51 +328,59 @@ export const UserView: React.FC<UserViewProps> = ({
 
           {/* Quick preset chips - Horizontally swipeable on mobile */}
           <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1 max-w-full no-scrollbar">
-            <span className="text-[11px] text-slate-400 shrink-0">{t('presets')}</span>
+            <span className="text-[11px] font-bold text-slate-500 shrink-0">{t('presets')}</span>
             <button
-              onClick={() => {
-                setFrom(getFirstDayOfMonthStr());
-                setTo(getTodayStr());
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs"
+              type="button"
+              onClick={() => applyDatePreset('thisMonth')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 text-xs cursor-pointer border ${
+                activePreset === 'thisMonth'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+              }`}
             >
               {t('thisMonth')}
             </button>
             <button
-              onClick={() => {
-                const range = getLastMonthRange();
-                setFrom(range.from);
-                setTo(range.to);
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs"
+              type="button"
+              onClick={() => applyDatePreset('lastMonth')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 text-xs cursor-pointer border ${
+                activePreset === 'lastMonth'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+              }`}
             >
               {t('lastMonth')}
             </button>
             <button
-              onClick={() => {
-                const range = getLast7DaysRange();
-                setFrom(range.from);
-                setTo(range.to);
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs"
+              type="button"
+              onClick={() => applyDatePreset('last7Days')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 text-xs cursor-pointer border ${
+                activePreset === 'last7Days'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+              }`}
             >
               {t('last7Days')}
             </button>
             <button
-              onClick={() => {
-                setFrom(getTodayStr());
-                setTo(getTodayStr());
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs"
+              type="button"
+              onClick={() => applyDatePreset('today')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 text-xs cursor-pointer border ${
+                activePreset === 'today'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+              }`}
             >
               {t('today')}
             </button>
             <button
-              onClick={() => {
-                setFrom('2025-01-01');
-                setTo(getTodayStr());
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs"
+              type="button"
+              onClick={() => applyDatePreset('allTime')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 text-xs cursor-pointer border ${
+                activePreset === 'allTime'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+              }`}
             >
               {t('allTime')}
             </button>

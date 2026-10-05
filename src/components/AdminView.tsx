@@ -5,12 +5,21 @@ import { StatsCards } from './StatsCards';
 import { RecordTable } from './RecordTable';
 import { RecordForm } from './RecordForm';
 import { PrintReportView } from './PrintReportView';
-import { formatCurrency, exportRecordsToCSV, exportAllFinancialRecordsToCSV, getFirstDayOfMonthStr, getTodayStr } from '../utils/formatters';
+import {
+  formatCurrency,
+  exportRecordsToCSV,
+  exportAllFinancialRecordsToCSV,
+  getFirstDayOfMonthStr,
+  getLastDayOfMonthStr,
+  getLastMonthRange,
+  getLast7DaysRange,
+  getTodayStr,
+} from '../utils/formatters';
 import { downloadLedgerPDF } from '../utils/pdfGenerator';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { MonthlyOverview } from './MonthlyOverview';
 import { useLanguage } from '../context/LanguageContext';
-import { Users, Truck, Shield, ArrowLeft, Printer, Download, Plus, Search, Calendar, FileText, CheckCircle2, AlertCircle, MessageSquare, Lock, Trash2, UserX } from 'lucide-react';
+import { Users, Truck, Shield, ArrowLeft, Printer, Download, Plus, Search, Calendar, FileText, CheckCircle2, AlertCircle, MessageSquare, Lock, Trash2, UserX, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 interface AdminViewProps {
   currentAdmin: Profile;
@@ -43,6 +52,66 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [isExportingFleetCsv, setIsExportingFleetCsv] = useState<boolean>(false);
   const [userToDelete, setUserToDelete] = useState<Profile | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState<boolean>(false);
+  const [userToChangePassword, setUserToChangePassword] = useState<(Profile & { password?: string }) | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [isChangingPassword, setIsChangingPassword] = useState<boolean>(false);
+  const [passwordModalError, setPasswordModalError] = useState<string | null>(null);
+
+  const handleOpenChangePasswordModal = (user: Profile & { password?: string }) => {
+    setUserToChangePassword(user);
+    setNewPasswordInput('');
+    setShowNewPassword(false);
+    setPasswordModalError(null);
+  };
+
+  const handleAdminChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToChangePassword) return;
+    const cleanPass = newPasswordInput.trim();
+    if (!cleanPass || cleanPass.length < 4) {
+      setPasswordModalError(
+        isBangla
+          ? 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।'
+          : 'New password must be at least 4 characters.'
+      );
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setPasswordModalError(null);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ password: cleanPass })
+        .eq('id', userToChangePassword.id);
+
+      if (error) {
+        setPasswordModalError(error.message || 'Failed to update password.');
+        setIsChangingPassword(false);
+        return;
+      }
+
+      const targetVehicle = userToChangePassword.vehicle_number;
+      const targetName = userToChangePassword.name;
+      setUserToChangePassword(null);
+      setNewPasswordInput('');
+      await loadUsers();
+      if (selectedUser && selectedUser.id === userToChangePassword.id) {
+        setSelectedUser({ ...selectedUser, ...({ password: cleanPass } as any) });
+      }
+      setAdminNotice(
+        isBangla
+          ? `গাড়ি "${targetVehicle}" (${targetName})-এর পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!`
+          : `Password for vehicle "${targetVehicle}" (${targetName}) has been updated successfully!`
+      );
+      setTimeout(() => setAdminNotice(null), 6000);
+    } catch (err: any) {
+      setPasswordModalError(err?.message || 'Unexpected error changing password.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   const handleOpenWhatsApp = (date?: string) => {
     setWhatsAppSingleDate(date);
@@ -51,7 +120,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Selected user date filters
   const [from, setFrom] = useState<string>(getFirstDayOfMonthStr());
-  const [to, setTo] = useState<string>(getTodayStr());
+  const [to, setTo] = useState<string>(getLastDayOfMonthStr());
+  const [activeAuditPreset, setActiveAuditPreset] = useState<
+    'thisMonth' | 'lastMonth' | 'last7Days' | 'today' | 'allTime' | 'custom'
+  >('thisMonth');
 
   // Load all users
   const loadUsers = async () => {
@@ -66,23 +138,58 @@ export const AdminView: React.FC<AdminViewProps> = ({
   }, []);
 
   // When a user is selected, load their daily records
-  const loadUserRecords = async (userId: string) => {
+  const loadUserRecords = async (userId: string, customFrom?: string, customTo?: string) => {
+    const startRange = customFrom ?? from;
+    const endRange = customTo ?? to;
     const { data } = await supabase
       .from('daily_records')
       .select('*')
       .eq('user_id', userId)
-      .gte('record_date', from)
-      .lte('record_date', to)
+      .gte('record_date', startRange)
+      .lte('record_date', endRange)
       .order('record_date', { ascending: false });
     setRecords(data || []);
   };
 
   useEffect(() => {
     if (selectedUser) {
-      loadUserRecords(selectedUser.id);
+      loadUserRecords(selectedUser.id, from, to);
     }
     onSubViewChange?.(Boolean(selectedUser));
   }, [selectedUser, from, to]);
+
+  const applyAuditDatePreset = (
+    preset: 'thisMonth' | 'lastMonth' | 'last7Days' | 'today' | 'allTime'
+  ) => {
+    let nextFrom = from;
+    let nextTo = to;
+
+    if (preset === 'thisMonth') {
+      nextFrom = getFirstDayOfMonthStr();
+      nextTo = getLastDayOfMonthStr();
+    } else if (preset === 'lastMonth') {
+      const range = getLastMonthRange();
+      nextFrom = range.from;
+      nextTo = range.to;
+    } else if (preset === 'last7Days') {
+      const range = getLast7DaysRange();
+      nextFrom = range.from;
+      nextTo = range.to;
+    } else if (preset === 'today') {
+      nextFrom = getTodayStr();
+      nextTo = getTodayStr();
+    } else if (preset === 'allTime') {
+      nextFrom = '2000-01-01';
+      nextTo = '2099-12-31';
+    }
+
+    setActiveAuditPreset(preset);
+    setFrom(nextFrom);
+    setTo(nextTo);
+    if (selectedUser) {
+      loadUserRecords(selectedUser.id, nextFrom, nextTo);
+    }
+  };
 
   useEffect(() => {
     if (backSignal > 0 && selectedUser) {
@@ -484,6 +591,15 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 <span>{isGeneratingPdf ? 'Generating...' : 'PDF Statement'}</span>
               </button>
               <button
+                type="button"
+                onClick={() => handleOpenChangePasswordModal(selectedUser as any)}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors shadow-2xs"
+                title={isBangla ? 'এই গাড়ির পাসওয়ার্ড পরিবর্তন করুন' : 'Change password for this vehicle'}
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                <span>{isBangla ? 'পাসওয়ার্ড পরিবর্তন' : 'Change Password'}</span>
+              </button>
+              <button
                 onClick={() => setUserToDelete(selectedUser)}
                 className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg transition-colors shadow-2xs"
                 title="Delete this vehicle and user account"
@@ -503,8 +619,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
           </div>
 
           {adminNotice && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{adminNotice}</span>
             </div>
           )}
@@ -514,43 +630,87 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Audit Period:
+                {isBangla ? 'অডিট সময়কাল:' : 'Audit Period:'}
               </span>
               <div className="flex items-center gap-2 text-xs">
                 <input
                   type="date"
                   value={from}
-                  onChange={e => setFrom(e.target.value)}
+                  onChange={e => {
+                    setActiveAuditPreset('custom');
+                    setFrom(e.target.value);
+                  }}
                   className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono-tabular text-xs focus:ring-1 focus:ring-blue-500"
                 />
-                <span className="text-slate-400">to</span>
+                <span className="text-slate-400">{isBangla ? 'থেকে' : 'to'}</span>
                 <input
                   type="date"
                   value={to}
-                  onChange={e => setTo(e.target.value)}
+                  onChange={e => {
+                    setActiveAuditPreset('custom');
+                    setTo(e.target.value);
+                  }}
                   className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono-tabular text-xs focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1 max-w-full no-scrollbar">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">{t('presets')}</span>
               <button
-                onClick={() => {
-                  setFrom(getFirstDayOfMonthStr());
-                  setTo(getTodayStr());
-                }}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
+                type="button"
+                onClick={() => applyAuditDatePreset('thisMonth')}
+                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+                  activeAuditPreset === 'thisMonth'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                }`}
               >
-                This Month
+                {t('thisMonth')}
               </button>
               <button
-                onClick={() => {
-                  setFrom('2026-01-01');
-                  setTo(getTodayStr());
-                }}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
+                type="button"
+                onClick={() => applyAuditDatePreset('lastMonth')}
+                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+                  activeAuditPreset === 'lastMonth'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                }`}
               >
-                All Time
+                {t('lastMonth')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyAuditDatePreset('last7Days')}
+                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+                  activeAuditPreset === 'last7Days'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                }`}
+              >
+                {t('last7Days')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyAuditDatePreset('today')}
+                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+                  activeAuditPreset === 'today'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                }`}
+              >
+                {t('today')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyAuditDatePreset('allTime')}
+                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+                  activeAuditPreset === 'allTime'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+                }`}
+              >
+                {t('allTime')}
               </button>
             </div>
           </div>
@@ -747,20 +907,30 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                    <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
                       <button
+                        type="button"
                         onClick={() => handleSelectUser(user)}
-                        className="flex-1 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 text-center"
+                        className="flex-1 py-2 px-2.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 text-center"
                       >
-                        View Vehicle Ledger &amp; Audit
+                        {isBangla ? 'হিসাব দেখুন' : 'View Ledger'}
                       </button>
                       <button
+                        type="button"
+                        onClick={() => handleOpenChangePasswordModal(user as any)}
+                        className="px-2.5 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-300 flex items-center justify-center gap-1"
+                        title={isBangla ? 'পাসওয়ার্ড পরিবর্তন করুন' : `Change password for ${user.vehicle_number}`}
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                        <span>{isBangla ? 'পাসওয়ার্ড' : 'Password'}</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setUserToDelete(user)}
                         className="px-2.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 flex items-center justify-center gap-1"
                         title={`Delete vehicle account ${user.vehicle_number}`}
                       >
                         <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -832,12 +1002,23 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
                             onClick={() => handleSelectUser(user)}
                             className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
                           >
-                            View Ledger
+                            {isBangla ? 'খতিয়ান দেখুন' : 'View Ledger'}
                           </button>
                           <button
+                            type="button"
+                            onClick={() => handleOpenChangePasswordModal(user as any)}
+                            title={isBangla ? 'পাসওয়ার্ড পরিবর্তন করুন' : `Change password for ${user.vehicle_number}`}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                            <span>{isBangla ? 'পাসওয়ার্ড পরিবর্তন' : 'Change Password'}</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setUserToDelete(user)}
                             title={`Delete vehicle account ${user.vehicle_number}`}
                             className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors"
@@ -1005,6 +1186,128 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 <span>Delete Account</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Change Vehicle Password Modal */}
+      {userToChangePassword && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6 space-y-4 animate-fadeIn">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  {isBangla ? 'গাড়ির পাসওয়ার্ড পরিবর্তন / রিসেট করুন' : 'Change / Reset Vehicle Password'}
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {isBangla
+                    ? 'চালক বা ব্যবহারকারী পাসওয়ার্ড ভুলে গেলে এখান থেকে নতুন পাসওয়ার্ড সেট করে দিন।'
+                    : 'Set a new login password for this active vehicle account if the driver forgot their password.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">{isBangla ? 'লগইন নম্বর:' : 'Log in Number:'}</span>
+                <span className="font-mono-tabular font-black text-slate-900">{userToChangePassword.vehicle_number}</span>
+              </div>
+              {userToChangePassword.vehicle_register_number && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">{isBangla ? 'গাড়ির রেজিঃ' : 'Vehicle Reg:'}</span>
+                  <span className="font-mono-tabular font-semibold text-slate-700">{userToChangePassword.vehicle_register_number}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">{isBangla ? 'চালকের নাম:' : 'Driver Name:'}</span>
+                <span className="font-bold text-slate-900">{userToChangePassword.name}</span>
+              </div>
+              {userToChangePassword.password && (
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/80">
+                  <span className="text-slate-500">{isBangla ? 'বর্তমান পাসওয়ার্ড:' : 'Current Password:'}</span>
+                  <span className="font-mono-tabular font-bold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded">
+                    {userToChangePassword.password}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleAdminChangePassword} className="space-y-3 text-xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700">
+                    {isBangla ? 'নতুন পাসওয়ার্ড লিখুন *' : 'New Login Password *'}
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400">{isBangla ? 'কুইক সেট:' : 'Quick set:'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewPasswordInput('123456')}
+                      className="text-[10px] font-mono-tabular font-bold px-1.5 py-0.5 bg-slate-100 hover:bg-blue-50 text-blue-700 rounded border border-slate-200"
+                    >
+                      123456
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewPasswordInput('password123')}
+                      className="text-[10px] font-mono-tabular font-bold px-1.5 py-0.5 bg-slate-100 hover:bg-blue-50 text-blue-700 rounded border border-slate-200"
+                    >
+                      password123
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={newPasswordInput}
+                    onChange={e => setNewPasswordInput(e.target.value)}
+                    placeholder={isBangla ? 'নতুন পাসওয়ার্ড লিখুন (কমপক্ষে ৪ অক্ষর)' : 'Enter new password (min 4 chars)'}
+                    className="w-full px-3 py-2.5 pr-9 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono-tabular focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(v => !v)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700"
+                    title={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {passwordModalError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-medium">
+                  {passwordModalError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isChangingPassword}
+                  onClick={() => setUserToChangePassword(null)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  {isBangla ? 'বাতিল' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {isChangingPassword ? (
+                    <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <KeyRound className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isBangla ? 'পাসওয়ার্ড সংরক্ষণ করুন' : 'Save New Password'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

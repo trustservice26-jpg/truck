@@ -5,6 +5,7 @@ import {
   formatCurrency,
   getTodayStr,
   getFirstDayOfMonthStr,
+  getLastDayOfMonthStr,
   getLastMonthRange,
   getLast7DaysRange,
   exportRecordsToCSV,
@@ -38,7 +39,7 @@ interface PdfGenerateViewProps {
 export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => {
   const { isBangla } = useLanguage();
   const [from, setFrom] = useState<string>(getFirstDayOfMonthStr());
-  const [to, setTo] = useState<string>(getTodayStr());
+  const [to, setTo] = useState<string>(getLastDayOfMonthStr());
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
@@ -306,51 +307,56 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
 
           {/* Quick preset chips */}
           <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1 max-w-full no-scrollbar">
-            <span className="text-[11px] text-slate-400 shrink-0">Presets:</span>
+            <span className="text-[11px] font-bold text-slate-500 shrink-0">Presets:</span>
             <button
+              type="button"
               onClick={() => {
                 setFrom(getFirstDayOfMonthStr());
-                setTo(getTodayStr());
+                setTo(getLastDayOfMonthStr());
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
             >
               This Month
             </button>
             <button
+              type="button"
               onClick={() => {
                 const range = getLastMonthRange();
                 setFrom(range.from);
                 setTo(range.to);
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
             >
               Last Month
             </button>
             <button
+              type="button"
               onClick={() => {
                 const range = getLast7DaysRange();
                 setFrom(range.from);
                 setTo(range.to);
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
             >
               Last 7 Days
             </button>
             <button
+              type="button"
               onClick={() => {
                 setFrom(getTodayStr());
                 setTo(getTodayStr());
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
             >
               Today
             </button>
             <button
+              type="button"
               onClick={() => {
-                setFrom('2025-01-01');
-                setTo(getTodayStr());
+                setFrom('2000-01-01');
+                setTo('2099-12-31');
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium"
+              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
             >
               All Time
             </button>

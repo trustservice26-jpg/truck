@@ -94,19 +94,32 @@ export const RecordForm: React.FC<RecordFormProps> = ({
     }
   };
 
+  const [activeQuickPreset, setActiveQuickPreset] = useState<string | null>(null);
+
   // Quick preset helper
-  const applyQuickTemplate = (template: {
-    inc: string;
-    cst: string;
-    cstDet?: string;
-    oth: string;
-    othDet?: string;
-  }) => {
+  const applyQuickTemplate = (
+    key: string,
+    template: {
+      inc: string;
+      cst: string;
+      cstDet: string;
+      oth: string;
+      othDet: string;
+    }
+  ) => {
+    setActiveQuickPreset(key);
     setIncome(template.inc);
     setCost(template.cst);
-    if (template.cstDet) setCostDetails(template.cstDet);
+    setCostDetails(template.cstDet);
     setOther(template.oth);
-    if (template.othDet) setOtherDetails(template.othDet);
+    setOtherDetails(template.othDet);
+    setStatusMessage({
+      text: isBangla
+        ? 'প্রিসেট ফর্মে বসানো হয়েছে — প্রয়োজনে পরিবর্তন করে সংরক্ষণ করুন।'
+        : 'Preset applied to form fields — review or adjust and click Save.',
+      type: 'success',
+    });
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   return (
@@ -127,41 +140,66 @@ export const RecordForm: React.FC<RecordFormProps> = ({
         </div>
 
         {/* Quick suggestions - horizontally scrollable on mobile */}
-        {!editingRecord && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar text-xs">
-            <span className="text-[11px] text-slate-400 font-medium shrink-0">{t('presets')}</span>
-            <button
-              type="button"
-              onClick={() =>
-                applyQuickTemplate({
-                  inc: '3500',
-                  cst: '900',
-                  cstDet: isBangla ? 'ডিজেল ৩৫ লিটার' : 'Diesel 35 Liters',
-                  oth: '150',
-                  othDet: isBangla ? 'টার্মিনাল টোল ও পার্কিং' : 'Terminal parking fee',
-                })
-              }
-              className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0"
-            >
-              {t('presetShuttle')}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                applyQuickTemplate({
-                  inc: '7500',
-                  cst: '2200',
-                  cstDet: isBangla ? 'হাইওয়ে ডিজেল রিফিল' : 'Highway diesel refill',
-                  oth: '350',
-                  othDet: isBangla ? 'পদ্মা সেতু / এক্সপ্রেসওয়ে টোল' : 'Expressway toll barrier fee',
-                })
-              }
-              className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors shrink-0"
-            >
-              {t('presetFreight')}
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar text-xs">
+          <span className="text-[11px] text-slate-500 font-bold shrink-0">{t('presets')}</span>
+          <button
+            type="button"
+            onClick={() =>
+              applyQuickTemplate('shuttle', {
+                inc: '3500',
+                cst: '900',
+                cstDet: isBangla ? 'ডিজেল ৩৫ লিটার' : 'Diesel 35 Liters',
+                oth: '150',
+                othDet: isBangla ? 'টার্মিনাল টোল ও পার্কিং' : 'Terminal parking fee',
+              })
+            }
+            className={`text-[11px] px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+              activeQuickPreset === 'shuttle'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+            }`}
+          >
+            {t('presetShuttle')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              applyQuickTemplate('freight', {
+                inc: '7500',
+                cst: '2200',
+                cstDet: isBangla ? 'হাইওয়ে ডিজেল রিফিল' : 'Highway diesel refill',
+                oth: '350',
+                othDet: isBangla ? 'পদ্মা সেতু / এক্সপ্রেসওয়ে টোল' : 'Expressway toll barrier fee',
+              })
+            }
+            className={`text-[11px] px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+              activeQuickPreset === 'freight'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+            }`}
+          >
+            {t('presetFreight')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              applyQuickTemplate('charter', {
+                inc: '5500',
+                cst: '1400',
+                cstDet: isBangla ? 'জ্বালানি তেল ৫০ লিটার' : 'Fuel refill 50 Liters',
+                oth: '200',
+                othDet: isBangla ? 'পার্কিং ও লাইন খরচ' : 'Parking & route allowance',
+              })
+            }
+            className={`text-[11px] px-2.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 cursor-pointer border ${
+              activeQuickPreset === 'charter'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 border-slate-200'
+            }`}
+          >
+            {isBangla ? 'সারাদিন ভাড়া (Charter)' : 'Full Day Charter'}
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>
