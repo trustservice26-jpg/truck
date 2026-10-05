@@ -1,10 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 
 // Built-in fallback config so external deployments (e.g. Vercel / GitHub export)
-// work seamlessly even if firebase-applet-config.json is not included in the Git export.
-const firebaseConfig = {
+// work seamlessly on all mobile phones, public phones, and desktop browsers.
+export const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'inbound-approach-r6ppv',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:234533909903:web:b00112650cbe13421907fa',
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCu3zzr2C05rA4MNj2Y54NzH6yC6Fqmmjc',
@@ -20,8 +20,23 @@ const firebaseConfig = {
 // Initialize the online Firebase applet
 export const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Connect to the specific provisioned Firestore database
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// CRITICAL: Use experimentalAutoDetectLongPolling so mobile carrier networks (4G/5G),
+// public Wi-Fi proxies, and in-app mobile browsers never hang on WebChannel streams.
+function createMobileSafeFirestore() {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = createMobileSafeFirestore();
 
 // Firebase Authentication
 export const auth = getAuth(app);
@@ -63,16 +78,3 @@ export function handleFirestoreError(
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
-// Connection test on application boot
-export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Please check your Firebase configuration or network status.');
-    }
-  }
-}
-
-testConnection();

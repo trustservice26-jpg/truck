@@ -110,7 +110,11 @@ function FleetLedgerApp() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, fallbackUser?: Profile) => {
+    if (fallbackUser && fallbackUser.vehicle_number) {
+      setProfile(fallbackUser);
+      setLoading(false);
+    }
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -122,8 +126,8 @@ function FleetLedgerApp() {
         setProfile(data);
         setActiveTabState('ledger');
         setTabHistory([]);
-        await supabase.from('login_history').insert({ user_id: userId });
-      } else {
+        supabase.from('login_history').insert({ user_id: userId }).then(() => {});
+      } else if (!fallbackUser) {
         console.warn('Profile not found:', error);
       }
     } catch (err) {
@@ -134,11 +138,15 @@ function FleetLedgerApp() {
   };
 
   useEffect(() => {
+    const bootTimer = setTimeout(() => {
+      setLoading(false);
+    }, 3500);
+
     supabase.auth.getSession().then(({ data }: any) => {
       const currentSession = data?.session;
       setSession(currentSession);
       if (currentSession?.user) {
-        fetchProfile(currentSession.user.id);
+        fetchProfile(currentSession.user.id, currentSession.user);
       } else {
         setLoading(false);
       }
@@ -149,7 +157,9 @@ function FleetLedgerApp() {
         setSession(newSession);
         if (newSession?.user) {
           setStandaloneAdminMode(false);
-          fetchProfile(newSession.user.id);
+          setActiveTabState('ledger');
+          setTabHistory([]);
+          fetchProfile(newSession.user.id, newSession.user);
         } else {
           setProfile(null);
           setLoading(false);
@@ -158,6 +168,7 @@ function FleetLedgerApp() {
     );
 
     return () => {
+      clearTimeout(bootTimer);
       authListener?.subscription?.unsubscribe();
     };
   }, []);

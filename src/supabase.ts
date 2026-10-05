@@ -1,14 +1,12 @@
 import { DailyRecord, Profile } from './types';
-import { db, auth } from './firebase';
+import { db, firebaseConfig } from './firebase';
 import {
   collection,
   doc,
   getDocs,
-  getDoc,
   setDoc,
   updateDoc,
   deleteDoc,
-  serverTimestamp,
 } from 'firebase/firestore';
 
 // Storage keys for session caching & offline resilience
@@ -16,6 +14,168 @@ const LOCAL_USERS_KEY = 'fleet_profiles_cache_v2';
 const LOCAL_RECORDS_KEY = 'fleet_records_cache_v2';
 const LOCAL_SESSION_KEY = 'fleet_current_session_v2';
 const LOCAL_LOGIN_HIST_KEY = 'fleet_login_history_v2';
+
+const FIRESTORE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents`;
+
+/**
+ * Strips undefined values from an object before writing to Firestore
+ * (Firestore SDK throws an error if any property is `undefined`).
+ */
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const clean: Record<string, any> = {};
+  Object.keys(obj).forEach(key => {
+    if (obj[key] !== undefined) {
+      clean[key] = obj[key];
+    }
+  });
+  return clean;
+}
+
+/**
+ * Wraps any promise in a timeout so mobile carrier networks never hang indefinitely.
+ */
+function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${ms}ms`));
+    }, ms);
+    promise
+      .then(val => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+/**
+ * Converts a Firestore REST API document into a plain JS object.
+ */
+function parseRestDocument(docObj: any): Record<string, any> {
+  const parts = String(docObj.name || '').split('/');
+  const docId = parts[parts.length - 1] || '';
+  const fields = docObj.fields || {};
+  const result: Record<string, any> = { id: docId, _docId: docId };
+
+  Object.keys(fields).forEach(k => {
+    const f = fields[k];
+    if ('stringValue' in f) result[k] = f.stringValue;
+    else if ('integerValue' in f) result[k] = Number(f.integerValue);
+    else if ('doubleValue' in f) result[k] = Number(f.doubleValue);
+    else if ('booleanValue' in f) result[k] = Boolean(f.booleanValue);
+    else if ('nullValue' in f) result[k] = null;
+  });
+
+  return result;
+}
+
+/**
+ * Converts a plain JS object into Firestore REST API fields format.
+ */
+function toRestFields(data: Record<string, any>): Record<string, any> {
+  const fields: Record<string, any> = {};
+  Object.keys(data).forEach(k => {
+    if (k === '_docId') return;
+    const val = data[k];
+    if (val === undefined) return;
+    if (val === null) {
+      fields[k] = { nullValue: null };
+    } else if (typeof val === 'number') {
+      if (Number.isInteger(val)) {
+        fields[k] = { integerValue: String(val) };
+      } else {
+        fields[k] = { doubleValue: val };
+      }
+    } else if (typeof val === 'boolean') {
+      fields[k] = { booleanValue: val };
+    } else {
+      fields[k] = { stringValue: String(val) };
+    }
+  });
+  return { fields };
+}
+
+/**
+ * Universal Mobile-Safe Cloud Reader:
+ * Tries Firebase SDK first (with 4.5s timeout), then falls back to HTTPS REST API
+ * so mobile phones & public networks where WebChannel is blocked still connect to live cloud data.
+ */
+async function fetchCloudCollection(tableName: string): Promise<any[]> {
+  try {
+    const snapshot = await withTimeout(getDocs(collection(db, tableName)), 4500);
+    const items: any[] = [];
+    snapshot.forEach(docSnap => {
+      items.push({
+        ...docSnap.data(),
+        id: docSnap.id,
+        _docId: docSnap.id,
+      });
+    });
+    return items;
+  } catch {
+    // Fallback to standard HTTPS fetch via Firestore REST API (works on 100% of mobile phones)
+    const res = await withTimeout(
+      fetch(`${FIRESTORE_REST_BASE}/${tableName}?pageSize=500&key=${firebaseConfig.apiKey}`),
+      6000
+    );
+    if (!res.ok) {
+      throw new Error(`REST fetch failed with status ${res.status}`);
+    }
+    const json = await res.json();
+    const docs: any[] = json.documents || [];
+    return docs.map(parseRestDocument);
+  }
+}
+
+/**
+ * Universal Mobile-Safe Cloud Writer:
+ * Tries Firebase SDK setDoc first (with 4.5s timeout), then falls back to HTTPS REST PATCH.
+ */
+async function writeCloudDocument(
+  tableName: string,
+  docId: string,
+  payload: Record<string, any>
+): Promise<void> {
+  const cleanPayload = sanitizeForFirestore(payload);
+  try {
+    await withTimeout(setDoc(doc(db, tableName, docId), cleanPayload, { merge: true }), 4500);
+  } catch {
+    const res = await withTimeout(
+      fetch(
+        `${FIRESTORE_REST_BASE}/${tableName}/${encodeURIComponent(docId)}?key=${firebaseConfig.apiKey}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(toRestFields(cleanPayload)),
+        }
+      ),
+      6000
+    );
+    if (!res.ok) {
+      throw new Error(`REST write failed with status ${res.status}`);
+    }
+  }
+}
+
+/**
+ * Universal Mobile-Safe Cloud Deleter:
+ */
+async function deleteCloudDocument(tableName: string, docId: string): Promise<void> {
+  try {
+    await withTimeout(deleteDoc(doc(db, tableName, docId)), 4500);
+  } catch {
+    await withTimeout(
+      fetch(
+        `${FIRESTORE_REST_BASE}/${tableName}/${encodeURIComponent(docId)}?key=${firebaseConfig.apiKey}`,
+        { method: 'DELETE' }
+      ),
+      6000
+    ).catch(() => {});
+  }
+}
 
 // Initial pre-seeded dataset for new cloud projects
 export const SEED_PROFILES: Profile[] = [
@@ -56,21 +216,23 @@ export const SEED_PROFILES: Profile[] = [
 function getPastDate(daysAgo: number): string {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export const SEED_RECORDS: DailyRecord[] = [
-  // Driver 1 (Marcus Chen: KA-01-AB-1234)
   {
     id: 'rec-01',
     user_id: 'user-driver-01',
     record_date: getPastDate(0),
-    income: 420.00,
+    income: 420.0,
     income_details: 'Morning airport shuttle + 4 afternoon executive city runs',
-    cost: 85.50,
+    cost: 85.5,
     cost_location: 'Shell Express - Central Ring Blvd',
     cost_details: '32.4 Liters Diesel fuel + windshield fluid',
-    other: 15.00,
+    other: 15.0,
     other_details: 'Terminal parking fee & tyre pressure check',
     created_at: new Date().toISOString(),
   },
@@ -78,12 +240,12 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-02',
     user_id: 'user-driver-01',
     record_date: getPastDate(1),
-    income: 380.00,
+    income: 380.0,
     income_details: 'Full day corporate charter booking',
-    cost: 72.00,
+    cost: 72.0,
     cost_location: 'BP Highway Station Exit 14',
     cost_details: '28 Liters Diesel fuel refill',
-    other: 22.50,
+    other: 22.5,
     other_details: 'Highway expressway electronic toll charges',
     created_at: new Date(Date.now() - 86400000).toISOString(),
   },
@@ -91,12 +253,12 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-03',
     user_id: 'user-driver-01',
     record_date: getPastDate(3),
-    income: 510.00,
+    income: 510.0,
     income_details: 'Weekend inter-city courier express batch',
-    cost: 110.00,
+    cost: 110.0,
     cost_location: 'Chevron Travel Plaza',
     cost_details: '42 Liters Premium Diesel',
-    other: 35.00,
+    other: 35.0,
     other_details: 'Express car wash & interior vacuuming',
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
   },
@@ -104,12 +266,12 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-04',
     user_id: 'user-driver-01',
     record_date: getPastDate(5),
-    income: 340.00,
+    income: 340.0,
     income_details: 'Standard commuter routes & parcel delivery',
-    cost: 65.00,
+    cost: 65.0,
     cost_location: 'Central Fuel Hub',
     cost_details: '25 Liters Diesel',
-    other: 12.00,
+    other: 12.0,
     other_details: 'Fastag toll pass deduction',
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
   },
@@ -117,27 +279,25 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-05',
     user_id: 'user-driver-01',
     record_date: getPastDate(8),
-    income: 490.00,
+    income: 490.0,
     income_details: 'Special events group transport',
-    cost: 95.00,
+    cost: 95.0,
     cost_location: 'Shell Airport Service Station',
     cost_details: '36 Liters fuel + engine oil top-up',
-    other: 45.00,
+    other: 45.0,
     other_details: 'Puncture repair and tire rotation service',
     created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
   },
-
-  // Driver 2 (Sarah Jenkins: MH-02-CD-5678)
   {
     id: 'rec-06',
     user_id: 'user-driver-02',
     record_date: getPastDate(0),
-    income: 390.00,
+    income: 390.0,
     income_details: 'Retail logistics distribution delivery route',
-    cost: 78.00,
+    cost: 78.0,
     cost_location: 'TotalEnergies Depot',
     cost_details: '30 Liters Diesel fuel',
-    other: 10.00,
+    other: 10.0,
     other_details: 'Warehouse loading dock gate fee',
     created_at: new Date().toISOString(),
   },
@@ -145,12 +305,12 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-07',
     user_id: 'user-driver-02',
     record_date: getPastDate(2),
-    income: 440.00,
+    income: 440.0,
     income_details: 'Cross-town pharmaceutical deliveries',
-    cost: 88.00,
+    cost: 88.0,
     cost_location: 'Texaco Midtown Service',
     cost_details: '34 Liters Diesel fuel',
-    other: 18.00,
+    other: 18.0,
     other_details: 'Bridge toll transit pass',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
@@ -158,27 +318,25 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-08',
     user_id: 'user-driver-02',
     record_date: getPastDate(6),
-    income: 310.00,
+    income: 310.0,
     income_details: 'City perimeter distribution drops',
-    cost: 60.00,
+    cost: 60.0,
     cost_location: 'Metro Gas & Diesel',
     cost_details: '24 Liters Diesel',
-    other: 0.00,
+    other: 0.0,
     other_details: 'No incidental costs',
     created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
   },
-
-  // Driver 3 (David Rodriguez: DL-1C-9988)
   {
     id: 'rec-09',
     user_id: 'user-driver-03',
     record_date: getPastDate(1),
-    income: 560.00,
+    income: 560.0,
     income_details: 'Industrial machinery components transport',
-    cost: 125.00,
+    cost: 125.0,
     cost_location: 'Interstate Truck Stop North',
     cost_details: '48 Liters Heavy Duty Diesel',
-    other: 55.00,
+    other: 55.0,
     other_details: 'Highway weigh station fee & coolant flush',
     created_at: new Date(Date.now() - 86400000).toISOString(),
   },
@@ -186,12 +344,12 @@ export const SEED_RECORDS: DailyRecord[] = [
     id: 'rec-10',
     user_id: 'user-driver-03',
     record_date: getPastDate(4),
-    income: 480.00,
+    income: 480.0,
     income_details: 'Wholesale market freight delivery',
-    cost: 92.00,
+    cost: 92.0,
     cost_location: 'QuickStop Fueling Center',
     cost_details: '35 Liters Diesel',
-    other: 20.00,
+    other: 20.0,
     other_details: 'Terminal cargo security pass',
     created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
   },
@@ -200,37 +358,32 @@ export const SEED_RECORDS: DailyRecord[] = [
 let hasCloudSeeded = false;
 
 /**
- * Initializes Firestore cloud collections with base profiles & records
- * if the remote online database is currently empty.
+ * Non-blocking cloud seed check with strict timeout so mobile phones never hang.
  */
 async function ensureCloudDataInitialized(): Promise<void> {
   if (hasCloudSeeded) return;
+  hasCloudSeeded = true;
   try {
-    const profSnap = await getDocs(collection(db, 'profiles'));
-    if (profSnap.empty) {
-      console.log('Seeding initial profiles to online Firestore database...');
+    const items = await fetchCloudCollection('profiles');
+    if (items.length === 0) {
       for (const p of SEED_PROFILES) {
-        await setDoc(doc(db, 'profiles', p.id), p);
+        await writeCloudDocument('profiles', p.id, p);
       }
       for (const r of SEED_RECORDS) {
-        await setDoc(doc(db, 'daily_records', r.id), r);
+        await writeCloudDocument('daily_records', r.id, r);
       }
-      console.log('Online Firestore cloud seeding complete.');
     }
-    hasCloudSeeded = true;
   } catch (err) {
     console.warn('Online database sync notice:', err);
   }
 }
 
-// Background sync attempt
+// Run seed check asynchronously in background
 ensureCloudDataInitialized();
 
 /**
  * Universal Database Client for FleetLedger.
- * Reads and writes directly to live online Cloud Firestore,
- * ensuring users from any device or session have immediate access
- * to all registered vehicles, previous accounts, and financial records.
+ * Works across all laptops, mobile phones, carrier networks, and public phones.
  */
 class CloudDatabaseClient {
   private authSubscribers: ((event: string, session: any) => void)[] = [];
@@ -254,24 +407,37 @@ class CloudDatabaseClient {
       email: string;
       password?: string;
     }) => {
-      await ensureCloudDataInitialized();
       const cleanVehicle = (email.split('@')[0] || '').trim().toUpperCase();
 
       try {
-        // Fetch all registered profiles directly from online Firestore
-        const snapshot = await getDocs(collection(db, 'profiles'));
+        let profilesList: any[] = [];
+        try {
+          profilesList = await fetchCloudCollection('profiles');
+          if (profilesList.length > 0) {
+            try {
+              localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(profilesList));
+            } catch {}
+          }
+        } catch {
+          try {
+            profilesList = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+          } catch {
+            profilesList = [];
+          }
+        }
+
         let matchedProfile: Profile | null = null;
         let matchedDocData: any = null;
 
-        snapshot.forEach(docSnap => {
-          const p = docSnap.data() as any;
-          if (p.vehicle_number && p.vehicle_number.toUpperCase() === cleanVehicle) {
+        profilesList.forEach(p => {
+          if (p.vehicle_number && String(p.vehicle_number).toUpperCase() === cleanVehicle) {
             matchedProfile = {
-              id: docSnap.id,
+              id: p.id,
               vehicle_number: p.vehicle_number,
+              vehicle_register_number: p.vehicle_register_number || undefined,
               name: p.name,
-              phone: p.phone,
-              role: p.role,
+              phone: p.phone || '',
+              role: p.role || 'user',
               created_at: p.created_at,
             };
             matchedDocData = p;
@@ -280,13 +446,11 @@ class CloudDatabaseClient {
 
         // Fallback to initial seeds if matching
         if (!matchedProfile) {
-          matchedProfile = SEED_PROFILES.find(
-            p => p.vehicle_number.toUpperCase() === cleanVehicle
-          ) || null;
+          matchedProfile =
+            SEED_PROFILES.find(p => p.vehicle_number.toUpperCase() === cleanVehicle) || null;
 
           if (matchedProfile) {
-            // Write to Firestore online so it persists forever
-            await setDoc(doc(db, 'profiles', matchedProfile.id), {
+            writeCloudDocument('profiles', matchedProfile.id, {
               ...matchedProfile,
               password: password || 'password123',
             }).catch(() => {});
@@ -297,17 +461,17 @@ class CloudDatabaseClient {
           return {
             data: null,
             error: {
-              message: `Vehicle registration "${cleanVehicle}" was not found in the online cloud database. Please switch to "Register New Vehicle" tab to register.`,
+              message: `Log in Number "${cleanVehicle}" was not found. Please switch to the "Register" tab to register this vehicle.`,
             },
           };
         }
 
         // Verify password if set on profile
-        if (matchedDocData?.password && password && matchedDocData.password !== password) {
+        if (matchedDocData?.password && password && String(matchedDocData.password) !== password) {
           return {
             data: null,
             error: {
-              message: `Incorrect password for vehicle "${cleanVehicle}". Please check your password.`,
+              message: `Incorrect password for Log in Number "${cleanVehicle}". Please check your password or ask Admin to reset it.`,
             },
           };
         }
@@ -327,7 +491,7 @@ class CloudDatabaseClient {
         console.error('Online login error:', err);
         return {
           data: null,
-          error: { message: err?.message || 'Failed to authenticate with online database' },
+          error: { message: err?.message || 'Failed to authenticate. Please check your internet connection.' },
         };
       }
     },
@@ -341,7 +505,6 @@ class CloudDatabaseClient {
       password?: string;
       options?: { data?: Record<string, any> };
     }) => {
-      await ensureCloudDataInitialized();
       const meta = options?.data || {};
       const vehicleNum = (meta.vehicle_number || email.split('@')[0] || '').trim().toUpperCase();
       const vehicleRegisterNum = (meta.vehicle_register_number || '').trim().toUpperCase();
@@ -353,15 +516,20 @@ class CloudDatabaseClient {
       }
 
       try {
-        // Check for existing vehicle registration online
-        const snapshot = await getDocs(collection(db, 'profiles'));
-        let exists = false;
-        snapshot.forEach(docSnap => {
-          const p = docSnap.data() as Profile;
-          if (p.vehicle_number && p.vehicle_number.toUpperCase() === vehicleNum) {
-            exists = true;
+        let profilesList: any[] = [];
+        try {
+          profilesList = await fetchCloudCollection('profiles');
+        } catch {
+          try {
+            profilesList = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+          } catch {
+            profilesList = [];
           }
-        });
+        }
+
+        const exists = profilesList.some(
+          p => p.vehicle_number && String(p.vehicle_number).toUpperCase() === vehicleNum
+        );
 
         if (exists) {
           return {
@@ -376,18 +544,26 @@ class CloudDatabaseClient {
         const newProfile: Profile = {
           id: newId,
           vehicle_number: vehicleNum,
-          vehicle_register_number: vehicleRegisterNum || undefined,
+          ...(vehicleRegisterNum ? { vehicle_register_number: vehicleRegisterNum } : {}),
           name,
           phone,
           role: vehicleNum.startsWith('ADM') ? 'admin' : 'user',
           created_at: new Date().toISOString(),
         };
 
-        // Write directly to online Firestore so user can log in from any device worldwide
-        await setDoc(doc(db, 'profiles', newId), {
+        const docToSave = sanitizeForFirestore({
           ...newProfile,
           password: password || 'password',
         });
+
+        // Write to cloud (via SDK or HTTPS REST fallback)
+        await writeCloudDocument('profiles', newId, docToSave);
+
+        // Also update local cache immediately
+        try {
+          const updatedCache = [docToSave, ...profilesList];
+          localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedCache));
+        } catch {}
 
         const session = {
           user: newProfile,
@@ -447,7 +623,7 @@ class CloudDatabaseClient {
 }
 
 /**
- * Fluent Query Builder executing against live Firestore collections
+ * Fluent Query Builder executing against live Firestore collections (SDK + HTTPS REST fallback)
  */
 class CloudQueryBuilder {
   private tableName: string;
@@ -522,8 +698,6 @@ class CloudQueryBuilder {
 
   private async execute(): Promise<{ data: any; x?: any; error: any }> {
     try {
-      await ensureCloudDataInitialized();
-
       if (this.operation === 'insert') {
         return await this.executeInsert();
       }
@@ -544,26 +718,22 @@ class CloudQueryBuilder {
     let items: any[] = [];
 
     try {
-      const snapshot = await getDocs(collection(db, this.tableName));
-      snapshot.forEach(docSnap => {
-        items.push({
-          ...docSnap.data(),
-          id: docSnap.id,
-          _docId: docSnap.id,
-        });
-      });
+      items = await fetchCloudCollection(this.tableName);
 
       // Update local storage cache
-      if (this.tableName === 'profiles' && items.length > 0) {
-        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(items));
-      } else if (this.tableName === 'daily_records' && items.length > 0) {
-        localStorage.setItem(LOCAL_RECORDS_KEY, JSON.stringify(items));
-      }
+      try {
+        if (this.tableName === 'profiles' && items.length > 0) {
+          localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(items));
+        } else if (this.tableName === 'daily_records' && items.length > 0) {
+          localStorage.setItem(LOCAL_RECORDS_KEY, JSON.stringify(items));
+        }
+      } catch {}
     } catch (err) {
-      console.warn(`Firestore read notice for ${this.tableName}, checking local cache:`, err);
+      console.warn(`Cloud read notice for ${this.tableName}, using local cache:`, err);
       try {
         if (this.tableName === 'profiles') {
           items = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+          if (items.length === 0) items = [...SEED_PROFILES];
         } else if (this.tableName === 'daily_records') {
           items = JSON.parse(localStorage.getItem(LOCAL_RECORDS_KEY) || '[]');
         } else {
@@ -600,7 +770,8 @@ class CloudQueryBuilder {
     const payload = this.insertPayload;
 
     if (this.tableName === 'daily_records') {
-      const docId = payload.id || 'rec-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const docId =
+        payload.id || 'rec-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const newRec: DailyRecord = {
         id: docId,
         user_id: payload.user_id,
@@ -615,16 +786,24 @@ class CloudQueryBuilder {
         created_at: new Date().toISOString(),
       };
 
-      // Write directly to online Firestore
-      await setDoc(doc(db, 'daily_records', docId), newRec);
+      await writeCloudDocument('daily_records', docId, newRec);
+
+      try {
+        const cached: any[] = JSON.parse(localStorage.getItem(LOCAL_RECORDS_KEY) || '[]');
+        localStorage.setItem(LOCAL_RECORDS_KEY, JSON.stringify([newRec, ...cached]));
+      } catch {}
 
       return { data: [newRec], error: null };
     }
 
     if (this.tableName === 'profiles') {
       const docId = payload.id || 'user-' + Date.now().toString(36);
-      const newProfile = { ...payload, id: docId, created_at: payload.created_at || new Date().toISOString() };
-      await setDoc(doc(db, 'profiles', docId), newProfile);
+      const newProfile = sanitizeForFirestore({
+        ...payload,
+        id: docId,
+        created_at: payload.created_at || new Date().toISOString(),
+      });
+      await writeCloudDocument('profiles', docId, newProfile);
       return { data: [newProfile], error: null };
     }
 
@@ -635,7 +814,7 @@ class CloudQueryBuilder {
         user_id: payload.user_id,
         logged_in_at: new Date().toISOString(),
       };
-      await setDoc(doc(db, 'login_history', docId), entry).catch(() => {});
+      writeCloudDocument('login_history', docId, entry).catch(() => {});
       return { data: [entry], error: null };
     }
 
@@ -643,20 +822,17 @@ class CloudQueryBuilder {
   }
 
   private async executeUpdate(): Promise<{ data: any; error: any }> {
-    const payload = this.updatePayload;
+    const payload = sanitizeForFirestore(this.updatePayload || {});
 
-    // Read current items to find which match the filters
     const selectRes = await this.executeSelect();
     const matchingDocs: any[] = selectRes.data || [];
 
     for (const item of matchingDocs) {
       const docId = String(item._docId || item.id || '').trim();
       if (docId) {
-        try {
-          await updateDoc(doc(db, this.tableName, docId), payload);
-        } catch {
-          await setDoc(doc(db, this.tableName, docId), { ...item, ...payload }, { merge: true });
-        }
+        const merged = sanitizeForFirestore({ ...item, ...payload });
+        delete merged._docId;
+        await writeCloudDocument(this.tableName, docId, merged);
       }
     }
 
@@ -682,22 +858,16 @@ class CloudQueryBuilder {
   }
 
   private async executeDelete(): Promise<{ data: any; error: any }> {
-    // Read current items to identify matching IDs
     const selectRes = await this.executeSelect();
     const matchingDocs: any[] = selectRes.data || [];
 
     for (const item of matchingDocs) {
       const docId = String(item._docId || item.id || '').trim();
       if (docId) {
-        try {
-          await deleteDoc(doc(db, this.tableName, docId));
-        } catch (delErr: any) {
-          console.warn(`Firestore deleteDoc warning on ${this.tableName}/${docId}:`, delErr);
-        }
+        await deleteCloudDocument(this.tableName, docId);
       }
     }
 
-    // Update local storage caches after successful deletion
     try {
       if (this.tableName === 'profiles') {
         const cached: any[] = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
@@ -805,4 +975,3 @@ export function importDatabaseJson(_jsonStr: string): {
 export const SUPABASE_SQL_SCHEMA = `-- Google Cloud Firestore Online Schema
 -- Managed via firebase-blueprint.json & firestore.rules
 -- Collections: profiles, daily_records, login_history`;
-
