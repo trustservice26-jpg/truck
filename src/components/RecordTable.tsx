@@ -130,16 +130,22 @@ export const RecordTable: React.FC<RecordTableProps> = ({
 
                 {/* Subtext notes if present */}
                 {(r.cost_details || r.other_details) && (
-                  <div className="text-[11px] text-slate-500 space-y-0.5 bg-slate-50/40 p-2 rounded border border-slate-100">
+                  <div className="text-xs text-slate-700 space-y-1.5 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200 leading-relaxed">
                     {r.cost_details && (
-                      <p className="line-clamp-2">
-                        <span className="font-medium text-slate-600">Cost info:</span> {r.cost_details}
-                      </p>
+                      <div className="whitespace-pre-line break-words">
+                        <span className="font-bold text-slate-900 block mb-0.5">
+                          {isBangla ? 'খরচের বিবরণ:' : 'Cost Details:'}
+                        </span>
+                        {r.cost_details}
+                      </div>
                     )}
                     {r.other_details && (
-                      <p className="line-clamp-2">
-                        <span className="font-medium text-slate-600">Other info:</span> {r.other_details}
-                      </p>
+                      <div className="whitespace-pre-line break-words pt-1 border-t border-slate-200/70">
+                        <span className="font-bold text-slate-900 block mb-0.5">
+                          {isBangla ? 'অন্যান্য বিবরণ:' : 'Other Details:'}
+                        </span>
+                        {r.other_details}
+                      </div>
                     )}
                   </div>
                 )}
@@ -267,11 +273,11 @@ export const RecordTable: React.FC<RecordTableProps> = ({
 
                     {/* Cost */}
                     <td className="py-3 px-4 text-right align-top">
-                      <div className="font-mono-tabular font-semibold text-amber-700">
+                      <div className="font-mono-tabular font-semibold text-red-600">
                         {formatCurrency(r.cost)}
                       </div>
                       {r.cost_details && (
-                        <div className="text-[11px] text-slate-500 mt-0.5 max-w-[220px] ml-auto line-clamp-2">
+                        <div className="text-xs text-slate-600 mt-1 max-w-[240px] ml-auto whitespace-pre-line leading-relaxed text-right">
                           {r.cost_details}
                         </div>
                       )}
@@ -279,11 +285,11 @@ export const RecordTable: React.FC<RecordTableProps> = ({
 
                     {/* Other */}
                     <td className="py-3 px-4 text-right align-top">
-                      <div className="font-mono-tabular font-medium text-slate-700">
+                      <div className="font-mono-tabular font-semibold text-red-600">
                         {formatCurrency(r.other)}
                       </div>
                       {r.other_details && (
-                        <div className="text-[11px] text-slate-500 mt-0.5 max-w-[200px] ml-auto line-clamp-2">
+                        <div className="text-xs text-slate-600 mt-1 max-w-[220px] ml-auto whitespace-pre-line leading-relaxed text-right">
                           {r.other_details}
                         </div>
                       )}

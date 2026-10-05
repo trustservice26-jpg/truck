@@ -237,31 +237,59 @@ export const RecordForm: React.FC<RecordFormProps> = ({
             </div>
           </div>
 
-          {/* Cost Details - For Fuel, Vendors & Maintenance */}
+          {/* Cost Details - Multi-line auto-adjusting box with line spacing */}
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {isBangla ? 'জ্বালানি/তেল খরচের বিবরণ' : 'Cost Details'}
-            </label>
-            <input
-              type="text"
-              placeholder={t('fuelNotes')}
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                {isBangla ? 'জ্বালানি/তেল ও খরচের বিবরণ (Cost Details)' : 'Cost Details (Multi-line supported)'}
+              </label>
+              <button
+                type="button"
+                onClick={() => setCostDetails(prev => (prev ? `${prev}\n` : ''))}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors"
+                title={isBangla ? 'নিচের লাইনে আরেকটি বিবরণ লিখুন' : 'Add a new line below to write another detail'}
+              >
+                {isBangla ? '+ নিচে নতুন লাইন' : '+ New Line'}
+              </button>
+            </div>
+            <textarea
+              rows={Math.max(2, Math.min(8, costDetails.split('\n').length))}
+              placeholder={
+                isBangla
+                  ? '১ম লাইন: ডিজেল ৩৫ লিটার\n২য় লাইন: ইঞ্জিন অয়েল বা অন্য খরচ... (Enter চাপুন নিচে লেখার জন্য)'
+                  : 'Line 1: Diesel 35L\nLine 2: Engine oil / filter... (Press Enter for new line)'
+              }
               value={costDetails}
               onChange={e => setCostDetails(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+              className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-y"
             />
           </div>
 
-          {/* Other Details */}
+          {/* Other Details - Multi-line auto-adjusting box with line spacing */}
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {isBangla ? 'টোল ও অন্যান্য খরচের বিবরণ' : 'Other Details'}
-            </label>
-            <input
-              type="text"
-              placeholder={t('otherNotes')}
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                {isBangla ? 'টোল ও অন্যান্য খরচের বিবরণ (Other Details)' : 'Other Details (Multi-line supported)'}
+              </label>
+              <button
+                type="button"
+                onClick={() => setOtherDetails(prev => (prev ? `${prev}\n` : ''))}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors"
+                title={isBangla ? 'নিচের লাইনে আরেকটি বিবরণ লিখুন' : 'Add a new line below to write another detail'}
+              >
+                {isBangla ? '+ নিচে নতুন লাইন' : '+ New Line'}
+              </button>
+            </div>
+            <textarea
+              rows={Math.max(2, Math.min(8, otherDetails.split('\n').length))}
+              placeholder={
+                isBangla
+                  ? '১ম লাইন: সেতু টোল\n২য় লাইন: পার্কিং ফি... (Enter চাপুন নিচে লেখার জন্য)'
+                  : 'Line 1: Bridge toll\nLine 2: Parking fee... (Press Enter for new line)'
+              }
               value={otherDetails}
               onChange={e => setOtherDetails(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+              className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-y"
             />
           </div>
         </div>
