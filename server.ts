@@ -54,7 +54,8 @@ async function startServer() {
         },
       })
     );
-    app.get('*', (_req, res) => {
+    // Catch-all SPA fallback compatible with both Express 4 and Express 5 (avoids '*' PathError)
+    app.use((_req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
