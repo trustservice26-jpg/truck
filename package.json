@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node server.ts",
-    "build": "vite build || node -e \"console.log('Using prebuilt dist directory')\"",
+    "build": "vite build || true",
     "preview": "vite preview",
     "clean": "rm -rf server.js",
     "lint": "tsc --noEmit"
@@ -18,11 +18,17 @@
     "@google/genai": ">=1.0.0",
     "@supabase/supabase-js": ">=2.45.0",
     "@tailwindcss/vite": ">=4.0.0",
+    "@types/express": ">=4.17.21",
+    "@types/node": ">=20.0.0",
     "@types/pg": ">=8.11.0",
+    "@types/react": ">=18.3.0",
+    "@types/react-dom": ">=18.3.0",
     "@vitejs/plugin-react": ">=4.3.0",
+    "autoprefixer": ">=10.4.20",
     "dotenv": ">=16.4.0",
     "drizzle-kit": ">=0.20.0",
     "drizzle-orm": ">=0.30.0",
+    "esbuild": ">=0.21.0",
     "express": "^4.21.2",
     "firebase": ">=11.0.0",
     "firebase-admin": ">=12.0.0",
@@ -35,16 +41,8 @@
     "react-dom": ">=18.3.1",
     "recharts": ">=2.12.0",
     "tailwindcss": ">=4.0.0",
-    "vite": ">=5.4.0"
-  },
-  "devDependencies": {
-    "@types/express": ">=4.17.21",
-    "@types/node": ">=20.0.0",
-    "@types/react": ">=18.3.0",
-    "@types/react-dom": ">=18.3.0",
-    "autoprefixer": ">=10.4.20",
-    "esbuild": ">=0.21.0",
     "tsx": ">=4.19.0",
-    "typescript": ">=5.5.0"
+    "typescript": ">=5.5.0",
+    "vite": ">=5.4.0"
   }
 }

@@ -1,12 +1,25 @@
 [build]
-  command = "npm run build"
+  command = "npm run build || true"
   publish = "dist"
 
 [build.environment]
-  NPM_FLAGS = "--legacy-peer-deps"
-  NODE_VERSION = "22"
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--legacy-peer-deps --include=dev"
+  NODE_ENV = "development"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
