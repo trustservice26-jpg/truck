@@ -9,6 +9,7 @@ import { PdfGenerateView } from './components/PdfGenerateView';
 import { MonthlyOverview } from './components/MonthlyOverview';
 import { AdminPasswordGate } from './components/AdminPasswordGate';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
+import { executePrint } from './utils/printHelper';
 import { ArrowLeft, Shield, Lock, Truck } from 'lucide-react';
 
 const STANDALONE_ADMIN_PROFILE: Profile = {
@@ -324,7 +325,7 @@ function FleetLedgerApp() {
         isAdminUnlocked={isAdminUnlocked}
         onOpenAdminPasswordModal={handleOpenAdminPasswordModal}
         onLockAdmin={handleLockAdmin}
-        onPrint={() => window.print()}
+        onPrint={() => executePrint()}
         canGoBack={canGoBack}
         onBack={handleInAppBack}
       />

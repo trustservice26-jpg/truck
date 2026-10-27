@@ -15,7 +15,8 @@ import {
   exportRecordsToCSV,
   exportAllFinancialRecordsToCSV,
 } from '../utils/formatters';
-import { downloadLedgerPDF } from '../utils/pdfGenerator';
+import { downloadLedgerPDF, printLedgerPDF } from '../utils/pdfGenerator';
+import { executePrint } from '../utils/printHelper';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { MonthlyOverview } from './MonthlyOverview';
 import { useLanguage } from '../context/LanguageContext';
@@ -39,6 +40,7 @@ export const UserView: React.FC<UserViewProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [editingRecord, setEditingRecord] = useState<DailyRecord | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState<boolean>(false);
   const [whatsAppSingleDate, setWhatsAppSingleDate] = useState<string | undefined>(undefined);
@@ -247,6 +249,25 @@ export const UserView: React.FC<UserViewProps> = ({
     }
   };
 
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    try {
+      printLedgerPDF({
+        profile,
+        records,
+        totals,
+        from,
+        to,
+        language: isBangla ? 'bn' : 'en',
+      });
+      await executePrint();
+    } catch (err) {
+      console.error('Print error:', err);
+    } finally {
+      setTimeout(() => setIsPrinting(false), 2500);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
       {/* Driver Header Summary Strip */}
@@ -438,6 +459,28 @@ export const UserView: React.FC<UserViewProps> = ({
                 )}
               </button>
               <button
+                type="button"
+                onClick={handlePrint}
+                disabled={isPrinting}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white font-bold text-xs rounded-xl transition-colors border border-blue-500 shadow-sm cursor-pointer disabled:opacity-75"
+                title="Print A4 statement"
+              >
+                {isPrinting ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Printer className="w-4 h-4 text-white" />
+                )}
+                <span>
+                  {isPrinting
+                    ? isBangla
+                      ? 'প্রিন্ট হচ্ছে...'
+                      : 'Printing...'
+                    : isBangla
+                    ? 'প্রিন্ট'
+                    : 'Print'}
+                </span>
+              </button>
+              <button
                 onClick={() => handleOpenWhatsApp()}
                 className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl transition-colors shadow-xs"
               >
@@ -501,14 +544,16 @@ export const UserView: React.FC<UserViewProps> = ({
           </div>
 
           {/* On-screen Statement Document Preview */}
-          <PrintReportView
-            profile={profile}
-            records={records}
-            totals={totals}
-            from={from}
-            to={to}
-            screenPreview={true}
-          />
+          <div className="print:hidden">
+            <PrintReportView
+              profile={profile}
+              records={records}
+              totals={totals}
+              from={from}
+              to={to}
+              screenPreview={true}
+            />
+          </div>
         </div>
       ) : (
         /* Daily Record Entry & Ledger View */

@@ -11,7 +11,8 @@ import {
   exportRecordsToCSV,
   exportAllFinancialRecordsToCSV,
 } from '../utils/formatters';
-import { downloadLedgerPDF } from '../utils/pdfGenerator';
+import { downloadLedgerPDF, printLedgerPDF } from '../utils/pdfGenerator';
+import { executePrint } from '../utils/printHelper';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { PrintReportView } from './PrintReportView';
 import { useLanguage } from '../context/LanguageContext';
@@ -43,10 +44,12 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState<boolean>(false);
   const [isExportingAllCsv, setIsExportingAllCsv] = useState<boolean>(false);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [printNotice, setPrintNotice] = useState<string | null>(null);
 
   // Statement custom settings
   const [statementTitle, setStatementTitle] = useState<string>('Vehicle Income & Operating Cost Ledger');
@@ -122,7 +125,7 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
     };
   }, [records]);
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = async (): Promise<boolean> => {
     setIsGeneratingPdf(true);
     try {
       const success = await downloadLedgerPDF({
@@ -137,10 +140,51 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
         setDownloadSuccess(true);
         setTimeout(() => setDownloadSuccess(false), 3500);
       }
+      return success;
     } catch (err) {
       console.error('Failed to generate PDF:', err);
+      return false;
     } finally {
       setTimeout(() => setIsGeneratingPdf(false), 500);
+    }
+  };
+
+  // High-reliability print handler: triggers A4 auto-print PDF + native browser print
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    setPrintNotice(
+      isBangla
+        ? 'A4 প্রিন্ট প্রস্তুত ও শুরু হচ্ছে...'
+        : 'Preparing A4 print document...'
+    );
+
+    try {
+      // 1. Generate the exact A4 PDF with autoPrint embedded, triggering print/save
+      printLedgerPDF({
+        profile,
+        records,
+        totals,
+        from,
+        to,
+        language: isBangla ? 'bn' : 'en',
+      });
+
+      // 2. Also invoke native window.print() if outside an iframe
+      await executePrint();
+
+      setPrintNotice(
+        isBangla
+          ? 'A4 প্রিন্ট ডকুমেন্ট সফলভাবে প্রস্তুত হয়েছে!'
+          : 'A4 print statement ready & opened!'
+      );
+    } catch (err) {
+      console.error('Print action error:', err);
+      await handleDownloadPdf();
+    } finally {
+      setTimeout(() => {
+        setIsPrinting(false);
+        setPrintNotice(null);
+      }, 3000);
     }
   };
 
@@ -200,12 +244,26 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
           </button>
 
           <button
-            onClick={() => window.print()}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg sm:rounded-xl border border-white/20 transition-colors"
-            title="Browser print dialog"
+            type="button"
+            onClick={handlePrint}
+            disabled={isPrinting}
+            className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs font-bold rounded-lg sm:rounded-xl border border-blue-500 transition-colors shadow-sm cursor-pointer disabled:opacity-75"
+            title="Print or view A4 statement"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print</span>
+            {isPrinting ? (
+              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Printer className="w-4 h-4 text-white" />
+            )}
+            <span>
+              {isPrinting
+                ? isBangla
+                  ? 'প্রিন্ট হচ্ছে...'
+                  : 'Printing...'
+                : isBangla
+                ? 'প্রিন্ট করুন'
+                : 'Print A4'}
+            </span>
           </button>
 
           <button
@@ -242,130 +300,118 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
         </div>
       </div>
 
+      {printNotice && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between no-print animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <Printer className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="font-semibold">{printNotice}</span>
+          </div>
+        </div>
+      )}
+
       {backupNotice && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between no-print animate-fadeIn">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-medium">{backupNotice}</span>
           </div>
-          <button
-            onClick={() => setBackupNotice(null)}
-            className="text-emerald-700 hover:text-emerald-900 font-bold ml-2 text-base leading-none"
-          >
-            ×
-          </button>
         </div>
       )}
 
-      {/* Date Period Filter Strip */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-xs no-print space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+      {/* Date Range Selection Bar */}
+      <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs no-print space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-blue-600" />
-              <span>Statement Period:</span>
+              <span>{isBangla ? 'স্টেটমেন্ট সময়কাল:' : 'Statement Period:'}</span>
             </span>
 
-            <div className="flex items-center gap-2 text-xs w-full sm:w-auto">
-              <div className="flex-1 sm:flex-none">
-                <label className="text-[10px] text-slate-400 block">From</label>
+            <div className="flex items-center gap-2 text-xs">
+              <div>
+                <label className="text-[10px] text-slate-400 block">{isBangla ? 'হতে' : 'From'}</label>
                 <input
                   type="date"
                   value={from}
                   onChange={e => setFrom(e.target.value)}
-                  className="w-full sm:w-auto px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <span className="text-slate-400 mt-3 text-xs">to</span>
-              <div className="flex-1 sm:flex-none">
-                <label className="text-[10px] text-slate-400 block">To</label>
+              <span className="text-slate-400 mt-3 text-xs">{isBangla ? 'থেকে' : 'to'}</span>
+              <div>
+                <label className="text-[10px] text-slate-400 block">{isBangla ? 'পর্যন্ত' : 'To'}</label>
                 <input
                   type="date"
                   value={to}
                   onChange={e => setTo(e.target.value)}
-                  className="w-full sm:w-auto px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono-tabular text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mt-2 sm:mt-3">
-              <button
-                onClick={loadRecords}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
-              >
-                Update Preview
-              </button>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1"
-              >
-                <Settings2 className="w-3.5 h-3.5 text-slate-500" />
-                <span>Customize Header</span>
-              </button>
-            </div>
+            <button
+              onClick={loadRecords}
+              className="mt-3 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              {isBangla ? 'লোড করুন' : 'Load Period'}
+            </button>
           </div>
 
-          {/* Quick preset chips */}
+          {/* Quick Presets */}
           <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1 max-w-full no-scrollbar">
-            <span className="text-[11px] font-bold text-slate-500 shrink-0">Presets:</span>
             <button
-              type="button"
               onClick={() => {
                 setFrom(getFirstDayOfMonthStr());
                 setTo(getLastDayOfMonthStr());
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg font-semibold border border-slate-200 shrink-0 text-xs transition-colors"
             >
-              This Month
+              {isBangla ? 'চলতি মাস' : 'This Month'}
             </button>
             <button
-              type="button"
               onClick={() => {
                 const range = getLastMonthRange();
                 setFrom(range.from);
                 setTo(range.to);
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg font-semibold border border-slate-200 shrink-0 text-xs transition-colors"
             >
-              Last Month
+              {isBangla ? 'গত মাস' : 'Last Month'}
             </button>
             <button
-              type="button"
               onClick={() => {
                 const range = getLast7DaysRange();
                 setFrom(range.from);
                 setTo(range.to);
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg font-semibold border border-slate-200 shrink-0 text-xs transition-colors"
             >
-              Last 7 Days
+              {isBangla ? 'বিগত ৭ দিন' : 'Last 7 Days'}
             </button>
             <button
-              type="button"
               onClick={() => {
-                setFrom(getTodayStr());
+                setFrom('2020-01-01');
                 setTo(getTodayStr());
               }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg font-semibold border border-slate-200 shrink-0 text-xs transition-colors"
             >
-              Today
+              {isBangla ? 'সব সময়' : 'All Time'}
             </button>
             <button
-              type="button"
-              onClick={() => {
-                setFrom('2000-01-01');
-                setTo('2099-12-31');
-              }}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-md transition-colors shrink-0 text-xs font-medium cursor-pointer"
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-1.5 rounded-lg border transition-colors shrink-0 ${
+                showSettings ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}
+              title="Statement customization settings"
             >
-              All Time
+              <Settings2 className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Optional Header Customization Panel */}
+        {/* Custom Header Title/Note Accordion */}
         {showSettings && (
-          <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fadeIn">
+          <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3 animate-fadeIn">
             <div>
               <label className="text-[11px] font-semibold text-slate-700 block mb-1">
                 Statement Document Title:
@@ -478,14 +524,21 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
 
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition-colors"
+              type="button"
+              onClick={handlePrint}
+              disabled={isPrinting}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-800 bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-300 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-75"
               title="Print document on A4 paper"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print A4</span>
+              {isPrinting ? (
+                <div className="w-3.5 h-3.5 border-2 border-slate-700 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>{isPrinting ? (isBangla ? 'প্রিন্ট হচ্ছে...' : 'Printing...') : (isBangla ? 'প্রিন্ট A4' : 'Print A4')}</span>
             </button>
             <button
+              type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-75 rounded-lg shadow-2xs transition-colors"
@@ -497,7 +550,8 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
           </div>
         </div>
 
-        <div className="bg-slate-200/80 p-1.5 sm:p-6 md:p-8 rounded-2xl border border-slate-300 shadow-inner overflow-x-auto">
+        {/* On-screen visual container (hidden during browser print) */}
+        <div className="bg-slate-200/80 p-1.5 sm:p-6 md:p-8 rounded-2xl border border-slate-300 shadow-inner overflow-x-auto print:hidden">
           <div className="max-w-[210mm] mx-auto">
             <PrintReportView
               profile={profile}
@@ -509,6 +563,18 @@ export const PdfGenerateView: React.FC<PdfGenerateViewProps> = ({ profile }) => 
             />
           </div>
         </div>
+      </div>
+
+      {/* Dedicated Clean Layout for Browser Print Command */}
+      <div className="print-only">
+        <PrintReportView
+          profile={profile}
+          records={records}
+          totals={totals}
+          from={from}
+          to={to}
+          screenPreview={false}
+        />
       </div>
 
       {/* WhatsApp Share Modal */}

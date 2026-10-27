@@ -46,15 +46,15 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
     <div
       className={
         screenPreview
-          ? 'bg-white border border-slate-300 rounded-xl sm:rounded-sm p-4 sm:p-8 md:p-10 shadow-xl sm:shadow-2xl text-slate-900 font-sans max-w-[210mm] mx-auto transition-all'
-          : 'print-only print-container p-4 sm:p-6 bg-white text-black font-sans w-full max-w-[210mm] mx-auto'
+          ? 'bg-white border border-slate-300 rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-lg text-slate-900 font-sans max-w-[210mm] mx-auto transition-all print:p-0 print:border-none print:shadow-none print:max-w-full'
+          : 'print-only print-container p-0 bg-white text-black font-sans w-full max-w-[190mm] mx-auto'
       }
       style={{
         minHeight: screenPreview ? '270mm' : 'auto',
       }}
     >
       {/* Top Document Header Bar */}
-      <div className="border-b-2 border-slate-900 pb-3 sm:pb-4 mb-4 sm:mb-5">
+      <div className="border-b-2 border-slate-900 pb-3 sm:pb-4 mb-4 sm:mb-5 print:pb-2.5 print:mb-3">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3">
           {/* Brand & Main Title */}
           <div className="flex items-start gap-2.5 sm:gap-3">
@@ -66,8 +66,8 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
                 <span className="text-xs sm:text-sm font-black tracking-wider uppercase text-slate-900">
                   FLEET-LEDGER
                 </span>
-                <span className="text-[10px] sm:text-xs font-extrabold px-2 py-0.5 bg-blue-100 text-blue-900 rounded border border-blue-300 tracking-wide uppercase inline-flex items-center gap-1 shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                <span className="text-[10px] sm:text-xs font-extrabold px-2 py-0.5 bg-blue-100 text-blue-900 rounded border border-blue-300 tracking-wide uppercase inline-flex items-center gap-1 print:border-slate-400 print:bg-slate-100 print:text-black">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 print:bg-black"></span>
                   {isBangla ? 'অডিট বিবরণী' : 'AUDIT STATEMENT'}
                 </span>
               </div>
@@ -76,7 +76,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
                   ? 'গাড়ির আয় ও পরিচালন ব্যয়ের খতিয়ান (টাকা ৳)'
                   : 'Vehicle Income & Operating Cost Ledger (৳)'}
               </h1>
-              <p className="text-xs sm:text-sm font-medium text-slate-600 mt-0.5">
+              <p className="text-xs sm:text-sm font-medium text-slate-600 mt-0.5 print:text-slate-700">
                 {isBangla
                   ? 'অফিসিয়াল ফ্লিট অডিট ও চালকের হিসাব নিষ্পত্তি বিবরণী'
                   : 'Official Fleet Audit & Driver Settlement Statement (Currency: Taka ৳)'}
@@ -85,7 +85,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
           </div>
 
           {/* Right/Bottom Metadata Box */}
-          <div className="grid grid-cols-1 sm:flex sm:flex-col sm:text-right gap-1 p-2.5 sm:p-0 bg-slate-50 sm:bg-transparent rounded-lg border border-slate-200 sm:border-0 text-xs sm:text-xs shrink-0">
+          <div className="grid grid-cols-1 sm:flex sm:flex-col sm:text-right gap-1 p-2 sm:p-0 bg-slate-50 sm:bg-transparent rounded-lg border border-slate-200 sm:border-0 text-xs shrink-0 print:border-none print:p-0 print:bg-transparent">
             <div>
               <span className="text-slate-600 font-semibold">{isBangla ? 'ডক রেফারেন্স:' : 'Doc Ref:'}</span>{' '}
               <span className="font-mono-tabular font-bold text-slate-950">{statementDocId}</span>
@@ -94,7 +94,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               <span className="text-slate-600 font-semibold">{isBangla ? 'তৈরির সময়:' : 'Generated:'}</span>{' '}
               <span className="font-bold text-slate-950 whitespace-nowrap">{currentDate}</span>
             </div>
-            <div className="pt-1 sm:pt-0 border-t border-slate-200 sm:border-0">
+            <div className="pt-0.5 sm:pt-0">
               <span className="text-slate-600 font-semibold">{isBangla ? 'সময়কাল:' : 'Period:'}</span>{' '}
               <span className="font-extrabold text-slate-950 font-mono-tabular whitespace-nowrap">
                 {formatDisplayDate(from)} {isBangla ? 'থেকে' : 'to'} {formatDisplayDate(to)}
@@ -104,8 +104,8 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
         </div>
       </div>
 
-      {/* Vehicle and Driver Credentials Box */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 sm:p-4 border border-slate-300 bg-slate-50/90 mb-4 sm:mb-5 text-xs sm:text-sm rounded-xl">
+      {/* Vehicle and Driver Credentials Box (Clean Crisp Bordered Card) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 sm:p-3.5 bg-slate-50/90 border border-slate-300 mb-4 sm:mb-5 text-xs sm:text-sm rounded-xl print:rounded-none print:border-slate-400 print:bg-slate-50 print:p-2.5 print:mb-3">
         <div className="sm:border-r border-slate-200 sm:pr-2 min-w-0">
           <span className="text-[11px] sm:text-xs text-slate-600 uppercase font-bold block tracking-wider">
             {isBangla ? 'লগইন নম্বর (Log in):' : 'Log in Number:'}
@@ -139,21 +139,21 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
           <span className="text-[11px] sm:text-xs text-slate-600 uppercase font-bold block tracking-wider">
             {isBangla ? 'অ্যাকাউন্ট রোল / মুদ্রা:' : 'Role & Currency:'}
           </span>
-          <span className="inline-block mt-1 font-extrabold text-xs uppercase px-2.5 py-0.5 bg-slate-200 text-slate-900 rounded">
+          <span className="inline-block mt-1 font-extrabold text-xs uppercase px-2 py-0.5 bg-slate-200 text-slate-900 rounded print:bg-slate-200 border border-slate-300">
             {(profile.role || 'USER').toUpperCase()} · ৳ TAKA
           </span>
         </div>
       </div>
 
-      {/* Financial Executive Summary Calculation Boxes (4 Cards with Bigger Clear Text) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-4 sm:mb-5 text-center">
+      {/* Financial Executive Summary Cards (Clean Defined Borders) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-4 sm:mb-5 text-center print:mb-3 print:gap-2">
         {/* Box 1: Gross Income */}
-        <div className="border border-emerald-300 p-2.5 sm:p-3 bg-emerald-50/70 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden">
+        <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-300 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden print:rounded-none print:border-emerald-400 print:bg-emerald-50/40 print:p-2">
           <span className="text-[11px] sm:text-xs text-emerald-900 uppercase font-extrabold tracking-tight block leading-snug break-words">
             {isBangla ? 'মোট আয় (Gross Income)' : 'Gross Income (৳)'}
           </span>
           <span
-            className={`${getBoxAmountSizeClass(incStr)} font-black font-mono-tabular text-emerald-950 my-1.5 block break-all leading-tight`}
+            className={`${getBoxAmountSizeClass(incStr)} font-black font-mono-tabular text-emerald-950 my-1 block break-all leading-tight`}
           >
             {incStr}
           </span>
@@ -162,13 +162,13 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
           </span>
         </div>
 
-        {/* Box 2: Fuel & Direct Costs (Red Color for Expense) */}
-        <div className="border border-red-300 p-2.5 sm:p-3 bg-red-50/80 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden">
+        {/* Box 2: Fuel & Direct Costs */}
+        <div className="p-2.5 sm:p-3 bg-red-50/80 border border-red-300 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden print:rounded-none print:border-red-400 print:bg-red-50/40 print:p-2">
           <span className="text-[11px] sm:text-xs text-red-800 uppercase font-extrabold tracking-tight block leading-snug break-words">
             {isBangla ? 'জ্বালানি ও খরচ (Expense)' : 'Fuel & Costs (Expense)'}
           </span>
           <span
-            className={`${getBoxAmountSizeClass(costStr)} font-black font-mono-tabular text-red-600 my-1.5 block break-all leading-tight`}
+            className={`${getBoxAmountSizeClass(costStr)} font-black font-mono-tabular text-red-600 my-1 block break-all leading-tight`}
           >
             {costStr}
           </span>
@@ -177,13 +177,13 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
           </span>
         </div>
 
-        {/* Box 3: Other Expenses (Red Color for Expense) */}
-        <div className="border border-red-300 p-2.5 sm:p-3 bg-red-50/80 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden">
+        {/* Box 3: Other Expenses */}
+        <div className="p-2.5 sm:p-3 bg-red-50/80 border border-red-300 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden print:rounded-none print:border-red-400 print:bg-red-50/40 print:p-2">
           <span className="text-[11px] sm:text-xs text-red-800 uppercase font-extrabold tracking-tight block leading-snug break-words">
             {isBangla ? 'অন্যান্য খরচ (Expense)' : 'Other Costs (Expense)'}
           </span>
           <span
-            className={`${getBoxAmountSizeClass(otherStr)} font-black font-mono-tabular text-red-600 my-1.5 block break-all leading-tight`}
+            className={`${getBoxAmountSizeClass(otherStr)} font-black font-mono-tabular text-red-600 my-1 block break-all leading-tight`}
           >
             {otherStr}
           </span>
@@ -193,12 +193,12 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
         </div>
 
         {/* Box 4: Net Settlement Balance */}
-        <div className="border-2 border-slate-900 p-2.5 sm:p-3 bg-slate-100 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden">
+        <div className="p-2.5 sm:p-3 bg-slate-100 border-2 border-slate-900 rounded-xl flex flex-col justify-between min-w-0 overflow-hidden print:rounded-none print:border-2 print:border-black print:bg-slate-100/70 print:p-2">
           <span className="text-[11px] sm:text-xs text-slate-900 uppercase font-black tracking-tight block leading-snug break-words">
             {isBangla ? 'নিট ব্যালেন্স (Net Balance)' : 'Net Settlement (৳)'}
           </span>
           <span
-            className={`${getBoxAmountSizeClass(balStr)} font-black font-mono-tabular my-1.5 block break-all leading-tight ${
+            className={`${getBoxAmountSizeClass(balStr)} font-black font-mono-tabular my-1 block break-all leading-tight ${
               totals.balance >= 0 ? 'text-emerald-700' : 'text-red-600'
             }`}
           >
@@ -216,27 +216,27 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
         </div>
       </div>
 
-      {/* Itemized Ledger Table with Stable, Larger, Multi-line Cost Details */}
-      <div className="border border-slate-300 rounded-xl overflow-x-auto mb-5 sm:mb-6 shadow-2xs">
-        <table className="w-full min-w-[600px] sm:min-w-full text-left border-collapse text-xs sm:text-sm">
+      {/* Itemized Ledger Table (Crisp Bordered Design) */}
+      <div className="border border-slate-300 rounded-xl overflow-x-auto mb-5 sm:mb-6 print:mb-3 print:overflow-visible print:border print:border-slate-400 print:rounded-none">
+        <table className="w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
-            <tr className="bg-slate-100 border-b-2 border-slate-300 font-extrabold text-slate-950 uppercase tracking-wider text-xs sm:text-xs">
-              <th className="py-3 px-3 border-r border-slate-300 w-26 text-center">
+            <tr className="bg-slate-100 border-b-2 border-slate-900 font-extrabold text-slate-950 uppercase tracking-wider text-xs">
+              <th className="py-2.5 px-2 text-center w-[15%] border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'তারিখ (Date)' : 'Date'}
               </th>
-              <th className="py-3 px-3 border-r border-slate-300 text-right w-28 text-emerald-900">
+              <th className="py-2.5 px-2 text-right w-[17%] text-emerald-900 border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'আয় (Income ৳)' : 'Income (৳)'}
               </th>
-              <th className="py-3 px-3 border-r border-slate-300 text-right w-28 text-red-700 bg-red-50/60">
+              <th className="py-2.5 px-2 text-right w-[17%] text-red-700 bg-red-50/50 border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'খরচ (Cost ৳)' : 'Cost (Expense ৳)'}
               </th>
-              <th className="py-3 px-3 border-r border-slate-300 min-w-[180px]">
+              <th className="py-2.5 px-2 w-[26%] border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'খরচের বিবরণ (Cost Details)' : 'Cost Details'}
               </th>
-              <th className="py-3 px-3 border-r border-slate-300 text-right w-26 text-red-700 bg-red-50/60">
+              <th className="py-2.5 px-2 text-right w-[12%] text-red-700 bg-red-50/50 border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'অন্যান্য (Other ৳)' : 'Other (Expense ৳)'}
               </th>
-              <th className="py-3 px-3 text-right w-28">
+              <th className="py-2.5 px-2 text-right w-[13%]">
                 {isBangla ? 'নিট ব্যালেন্স (৳)' : 'Net Balance (৳)'}
               </th>
             </tr>
@@ -247,7 +247,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
                 const bal =
                   (Number(r.income) || 0) - (Number(r.cost) || 0) - (Number(r.other) || 0);
 
-                // Combine all written details preserving each line entered by the user
+                // Combine all written details preserving line breaks
                 const detailBlocks: string[] = [];
                 if (r.cost_location?.trim()) detailBlocks.push(r.cost_location.trim());
                 if (r.cost_details?.trim()) detailBlocks.push(r.cost_details.trim());
@@ -257,29 +257,29 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
                 return (
                   <tr
                     key={r.id || idx}
-                    className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}
+                    className={`${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'} border-b border-slate-200 print:break-inside-avoid`}
                   >
-                    <td className="py-2.5 px-3 border-r border-slate-200 font-mono-tabular font-bold text-slate-950 text-center whitespace-nowrap align-top text-xs sm:text-sm">
+                    <td className="py-2 px-2 font-mono-tabular font-bold text-slate-950 text-center whitespace-nowrap align-top text-xs sm:text-sm border-r border-slate-200 print:border-slate-300">
                       {formatDisplayDate(r.record_date)}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono-tabular font-bold text-emerald-900 whitespace-nowrap align-top text-xs sm:text-sm">
+                    <td className="py-2 px-2 text-right font-mono-tabular font-bold text-emerald-900 whitespace-nowrap align-top text-xs sm:text-sm border-r border-slate-200 print:border-slate-300">
                       {formatCurrency(r.income, '৳')}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono-tabular font-bold text-red-600 whitespace-nowrap align-top text-xs sm:text-sm">
+                    <td className="py-2 px-2 text-right font-mono-tabular font-bold text-red-600 whitespace-nowrap align-top text-xs sm:text-sm border-r border-slate-200 print:border-slate-300">
                       {formatCurrency(r.cost, '৳')}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-slate-900 font-medium text-xs sm:text-sm break-words whitespace-pre-line leading-relaxed align-top">
+                    <td className="py-2 px-2 text-slate-900 font-medium text-xs sm:text-sm break-words whitespace-pre-line leading-relaxed align-top border-r border-slate-200 print:border-slate-300">
                       {fullDetailText ? (
                         <span>{fullDetailText}</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono-tabular font-bold text-red-600 whitespace-nowrap align-top text-xs sm:text-sm">
+                    <td className="py-2 px-2 text-right font-mono-tabular font-bold text-red-600 whitespace-nowrap align-top text-xs sm:text-sm border-r border-slate-200 print:border-slate-300">
                       {formatCurrency(r.other, '৳')}
                     </td>
                     <td
-                      className={`py-2.5 px-3 text-right font-mono-tabular font-extrabold whitespace-nowrap align-top text-xs sm:text-sm ${
+                      className={`py-2 px-2 text-right font-mono-tabular font-extrabold whitespace-nowrap align-top text-xs sm:text-sm ${
                         bal >= 0 ? 'text-slate-950' : 'text-red-600'
                       }`}
                     >
@@ -290,9 +290,9 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               })
             ) : (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-slate-500 bg-white">
+                <td colSpan={6} className="py-8 text-center text-slate-500 bg-white">
                   <div className="flex flex-col items-center justify-center gap-1.5">
-                    <FileText className="w-7 h-7 text-slate-400" />
+                    <FileText className="w-6 h-6 text-slate-400" />
                     <span className="font-bold text-sm text-slate-700">
                       {isBangla
                         ? 'এই সময়ের জন্য কোনো লেনদেন রেকর্ড পাওয়া যায়নি'
@@ -306,26 +306,27 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
               </tr>
             )}
           </tbody>
-          <tfoot>
-            <tr className="bg-slate-100 font-bold border-t-2 border-slate-900 text-slate-950 text-xs sm:text-sm">
-              <td className="py-3 px-3 border-r border-slate-300 text-center font-black">
+
+          {/* CRITICAL: tfoot has print:table-row-group to render ONLY on the last page of multi-page reports */}
+          <tfoot className="border-t-2 border-b-2 border-slate-900 bg-slate-100 font-bold text-slate-950 text-xs sm:text-sm print:table-row-group print:break-inside-avoid">
+            <tr>
+              <td className="py-2.5 px-2 text-center font-black border-r border-slate-300 print:border-slate-400">
                 {isBangla ? 'সর্বমোট (TOTALS)' : 'TOTALS'}
               </td>
-              <td className="py-3 px-3 border-r border-slate-300 text-right font-mono-tabular font-black text-emerald-950 whitespace-nowrap">
+              <td className="py-2.5 px-2 text-right font-mono-tabular font-black text-emerald-950 whitespace-nowrap border-r border-slate-300 print:border-slate-400">
                 {formatCurrency(totals.income, '৳')}
               </td>
-              <td className="py-3 px-3 border-r border-slate-300 text-right font-mono-tabular font-black text-red-600 bg-red-50/60 whitespace-nowrap">
+              <td className="py-2.5 px-2 text-right font-mono-tabular font-black text-red-600 whitespace-nowrap border-r border-slate-300 print:border-slate-400">
                 {formatCurrency(totals.cost, '৳')}
               </td>
-              {/* Total costing amount removed/hidden from Cost Details bar as requested */}
-              <td className="py-3 px-3 border-r border-slate-300 text-center text-slate-400 font-normal">
+              <td className="py-2.5 px-2 text-center text-slate-400 font-normal border-r border-slate-300 print:border-slate-400">
                 —
               </td>
-              <td className="py-3 px-3 border-r border-slate-300 text-right font-mono-tabular font-black text-red-600 bg-red-50/60 whitespace-nowrap">
+              <td className="py-2.5 px-2 text-right font-mono-tabular font-black text-red-600 whitespace-nowrap border-r border-slate-300 print:border-slate-400">
                 {formatCurrency(totals.other, '৳')}
               </td>
               <td
-                className={`py-3 px-3 text-right font-mono-tabular font-black border-b-2 border-slate-900 whitespace-nowrap ${
+                className={`py-2.5 px-2 text-right font-mono-tabular font-black whitespace-nowrap ${
                   totals.balance >= 0 ? 'text-emerald-800' : 'text-red-600'
                 }`}
               >
@@ -337,15 +338,14 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({
       </div>
 
       {/* Official Footnote & Archival Watermark */}
-      <div className="mt-6 sm:mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-1 text-center sm:text-left font-medium">
+      <div className="mt-4 pt-2.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-1 text-center sm:text-left font-medium print:mt-3 print:pt-2">
         <span>
           FLEET-LEDGER Enterprise ·{' '}
           {isBangla ? 'অফিসিয়াল হিসাব নিষ্পত্তি বিবরণী' : 'Official Settlement Document'}
         </span>
         <span>
           Log in Number: {profile.vehicle_number}
-          {profile.vehicle_register_number ? ` (Reg: ${profile.vehicle_register_number})` : ''} ·{' '}
-          {isBangla ? 'পৃষ্ঠা ১' : 'Page 1 of 1'}
+          {profile.vehicle_register_number ? ` (Reg: ${profile.vehicle_register_number})` : ''}
         </span>
       </div>
     </div>

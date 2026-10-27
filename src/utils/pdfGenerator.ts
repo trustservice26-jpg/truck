@@ -10,6 +10,7 @@ export interface PDFExportOptions {
   from: string;
   to: string;
   language?: 'en' | 'bn';
+  autoPrint?: boolean;
 }
 
 const FONT_STACK = '"Plus Jakarta Sans", "Noto Sans Bengali", "Segoe UI", Roboto, sans-serif';
@@ -173,6 +174,7 @@ export function downloadLedgerPDF({
   from,
   to,
   language,
+  autoPrint = false,
 }: PDFExportOptions): boolean {
   const lang = getActiveLanguage(language);
   const isBangla = lang === 'bn';
@@ -198,29 +200,23 @@ export function downloadLedgerPDF({
       });
       const statementDocId = `FL-${profile.vehicle_number || 'VEH'}-${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`;
 
-      // Wide 198mm printable width (6mm side margins) so fonts can be significantly bigger and clearer
-      // Col 0 (Date): 26mm
-      // Col 1 (Income ৳): 31mm
-      // Col 2 (Cost ৳): 31mm
-      // Col 3 (Cost Details): 50mm
-      // Col 4 (Other ৳): 29mm
-      // Col 5 (Net Balance ৳): 31mm
-      const marginX = 6;
+      // Clean 10mm margins for exact A4 paper dimensions (190mm printable width)
+      const marginX = 10;
       const tableX = marginX;
-      const tableW = pageWidth - marginX * 2; // 198mm
-      const colWidths = [26, 31, 31, 50, 29, 31];
+      const tableW = pageWidth - marginX * 2; // 190mm
+      const colWidths = [25, 30, 30, 47, 28, 30]; // Sum = 190mm
       const colX = [
         tableX,
-        tableX + 26,
-        tableX + 26 + 31,
-        tableX + 26 + 31 + 31,
-        tableX + 26 + 31 + 31 + 50,
-        tableX + 26 + 31 + 31 + 50 + 29,
+        tableX + 25,
+        tableX + 25 + 30,
+        tableX + 25 + 30 + 30,
+        tableX + 25 + 30 + 30 + 47,
+        tableX + 25 + 30 + 30 + 47 + 28,
       ];
 
       // Noticeably larger font & line spacing for Cost Details and table rows
-      const detailFontMm = 3.85;
-      const lineSpacingMm = 5.0;
+      const detailFontMm = 3.8;
+      const lineSpacingMm = 4.8;
 
       // Pre-calculate each row's wrapped Cost Details lines & dynamic height
       const preparedRows: PreparedRow[] = records.map(r => {
@@ -238,7 +234,7 @@ export function downloadLedgerPDF({
           12
         );
 
-        const calculatedHeight = Math.max(12.2, detailLines.length * lineSpacingMm + 4.4);
+        const calculatedHeight = Math.max(11.5, detailLines.length * lineSpacingMm + 4.2);
         return {
           record: r,
           detailLines,
@@ -246,19 +242,24 @@ export function downloadLedgerPDF({
         };
       });
 
-      // Dynamic height-based pagination so multi-line Cost Details never overflow the page
+      // Dynamic height-based pagination ensuring total amount row fits strictly on the LAST page only
       const pages: PreparedRow[][] = [];
-      const maxContentY = pageHeight - 27; // Leave space for totals & footer
-      const headH = 11.5;
+      const maxContentY = pageHeight - 19; // Room for clean page footer
+      const headH = 10.5;
+      const footH = 12.0;
 
       if (preparedRows.length === 0) {
         pages.push([]);
       } else {
         let currentPageRows: PreparedRow[] = [];
-        let currentY = 85 + headH; // First page table body start Y
+        let currentY = 85 + headH; // First page table body start Y (after banner, credentials, cards)
 
-        preparedRows.forEach(pRow => {
-          if (currentPageRows.length > 0 && currentY + pRow.rowHeight > maxContentY) {
+        preparedRows.forEach((pRow, idx) => {
+          const isLastRow = idx === preparedRows.length - 1;
+          // Lookahead: ensure the last row also accommodates the totals row height on the last page!
+          const requiredSpace = pRow.rowHeight + (isLastRow ? footH : 0);
+
+          if (currentPageRows.length > 0 && currentY + requiredSpace > maxContentY) {
             pages.push(currentPageRows);
             currentPageRows = [pRow];
             currentY = 36 + headH + pRow.rowHeight; // Subsequent page table body start Y
@@ -286,32 +287,32 @@ export function downloadLedgerPDF({
         const ctx = canvas.getContext('2d')!;
         ctx.scale(scale, scale);
 
-        // White page background
+        // Clean white page background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, pageWidth, pageHeight);
 
-        // 1. Top Header Banner (Taller with larger, high-contrast typography)
+        // 1. Top Header Banner
         ctx.fillStyle = '#0f172a'; // slate-900
         ctx.fillRect(0, 0, pageWidth, 31);
 
         drawFittedText(ctx, 'FLEET-LEDGER', marginX, 9.2, 54, 6.4, 4.8, '#ffffff', '800', 'left');
 
         // Audit Badge
-        drawRoundedRect(ctx, 59, 5.5, 42, 7, 1.4, '#1e293b', '#475569', 0.3);
+        drawRoundedRect(ctx, marginX + 48, 5.5, 40, 7, 1.4, '#1e293b', '#475569', 0.35);
         drawFittedText(
           ctx,
           isBangla ? 'অডিট বিবরণী (AUDIT)' : 'AUDIT STATEMENT',
-          80,
+          marginX + 68,
           9.0,
-          39,
-          3.4,
-          2.6,
+          37,
+          3.3,
+          2.5,
           '#93c5fd',
           '800',
           'center'
         );
 
-        // Main Title & Subtitle (Bigger for effortless mobile reading)
+        // Main Title & Subtitle
         drawFittedText(
           ctx,
           isBangla
@@ -319,9 +320,9 @@ export function downloadLedgerPDF({
             : 'VEHICLE INCOME & OPERATING COST LEDGER (৳)',
           marginX,
           18.2,
-          124,
-          5.0,
-          3.6,
+          120,
+          4.8,
+          3.5,
           '#ffffff',
           '800',
           'left'
@@ -334,23 +335,23 @@ export function downloadLedgerPDF({
             : 'Official Fleet Audit & Driver Settlement Statement (Currency: Taka ৳)',
           marginX,
           25.2,
-          124,
-          3.6,
-          2.8,
+          120,
+          3.5,
+          2.7,
           '#cbd5e1',
           '600',
           'left'
         );
 
-        // Right Header Metadata (Larger font)
+        // Right Header Metadata
         drawFittedText(
           ctx,
           `${isBangla ? 'ডক রেফারেন্স' : 'Doc Ref'}: ${statementDocId}`,
           pageWidth - marginX,
           8.8,
-          72,
-          3.4,
-          2.5,
+          68,
+          3.3,
+          2.4,
           '#e2e8f0',
           '700',
           'right',
@@ -361,9 +362,9 @@ export function downloadLedgerPDF({
           `${isBangla ? 'তৈরির সময়' : 'Generated'}: ${currentDate}`,
           pageWidth - marginX,
           16.8,
-          72,
-          3.4,
-          2.5,
+          68,
+          3.3,
+          2.4,
           '#e2e8f0',
           '700',
           'right'
@@ -373,9 +374,9 @@ export function downloadLedgerPDF({
           `${isBangla ? 'সময়কাল' : 'Period'}: ${formatDisplayDate(from)} - ${formatDisplayDate(to)}`,
           pageWidth - marginX,
           24.8,
-          72,
-          3.7,
-          2.6,
+          68,
+          3.6,
+          2.5,
           '#ffffff',
           '800',
           'right'
@@ -384,13 +385,14 @@ export function downloadLedgerPDF({
         let tableStartY = 36;
 
         if (pageIdx === 0) {
-          // 2. Vehicle & Driver Credentials Box (Larger, Bolder Text)
+          // 2. Vehicle & Driver Credentials Box (With Clean Crisp Border)
           const credY = 34.5;
-          const credH = 20.5;
+          const credH = 19.5;
           drawRoundedRect(ctx, marginX, credY, tableW, credH, 2.0, '#f8fafc', '#94a3b8', 0.45);
 
           const colW = tableW / 4;
 
+          // Column divider lines
           for (let c = 1; c < 4; c++) {
             ctx.beginPath();
             ctx.moveTo(marginX + colW * c, credY + 2.5);
@@ -405,20 +407,20 @@ export function downloadLedgerPDF({
             ctx,
             isBangla ? 'লগইন নম্বর (LOG IN):' : 'LOG IN NUMBER:',
             marginX + 3,
-            credY + 5.2,
+            credY + 5.0,
             colW - 5,
-            3.4,
+            3.3,
             2.4,
-            '#334155',
+            '#475569',
             '800'
           );
           drawFittedText(
             ctx,
             profile.vehicle_number || 'N/A',
             marginX + 3,
-            credY + 11.4,
+            credY + 11.0,
             colW - 5,
-            4.8,
+            4.6,
             3.2,
             '#0f172a',
             '800',
@@ -430,11 +432,11 @@ export function downloadLedgerPDF({
               ctx,
               `${isBangla ? 'রেজিঃ' : 'Reg:'} ${profile.vehicle_register_number}`,
               marginX + 3,
-              credY + 16.8,
+              credY + 16.2,
               colW - 5,
-              3.4,
+              3.3,
               2.4,
-              '#1e293b',
+              '#334155',
               '700',
               'left',
               true
@@ -446,20 +448,20 @@ export function downloadLedgerPDF({
             ctx,
             isBangla ? 'চালকের নাম (DRIVER):' : 'DRIVER NAME:',
             marginX + 3 + colW,
-            credY + 5.2,
+            credY + 5.0,
             colW - 5,
-            3.4,
+            3.3,
             2.4,
-            '#334155',
+            '#475569',
             '800'
           );
           drawFittedText(
             ctx,
             profile.name || 'N/A',
             marginX + 3 + colW,
-            credY + 12.8,
+            credY + 12.2,
             colW - 5,
-            4.6,
+            4.5,
             3.0,
             '#0f172a',
             '800'
@@ -470,20 +472,20 @@ export function downloadLedgerPDF({
             ctx,
             isBangla ? 'ফোন নম্বর (PHONE):' : 'CONTACT PHONE:',
             marginX + 3 + colW * 2,
-            credY + 5.2,
+            credY + 5.0,
             colW - 5,
-            3.4,
+            3.3,
             2.4,
-            '#334155',
+            '#475569',
             '800'
           );
           drawFittedText(
             ctx,
             profile.phone || 'N/A',
             marginX + 3 + colW * 2,
-            credY + 12.8,
+            credY + 12.2,
             colW - 5,
-            4.3,
+            4.2,
             2.8,
             '#0f172a',
             '800',
@@ -496,44 +498,44 @@ export function downloadLedgerPDF({
             ctx,
             isBangla ? 'অ্যাকাউন্ট রোল / মুদ্রা:' : 'ROLE & CURRENCY:',
             marginX + 3 + colW * 3,
-            credY + 5.2,
+            credY + 5.0,
             colW - 5,
-            3.4,
+            3.3,
             2.4,
-            '#334155',
+            '#475569',
             '800'
           );
           drawFittedText(
             ctx,
             `${(profile.role || 'USER').toUpperCase()} · ৳ TAKA`,
             marginX + 3 + colW * 3,
-            credY + 12.8,
+            credY + 12.2,
             colW - 5,
-            4.2,
+            4.0,
             2.8,
             '#0f172a',
             '800'
           );
 
-          // 3. Financial Summary Calculation Boxes (4 Cards with Large, Bold Figures)
-          const cardY = 58;
-          const gap = 2.6;
+          // 3. Financial Summary Calculation Cards (With Clean Defined Borders)
+          const cardY = 57;
+          const gap = 2.5;
           const cardW = (tableW - gap * 3) / 4;
-          const cardH = 23.5;
-          const innerPad = 2.2;
+          const cardH = 22.5;
+          const innerPad = 2.0;
           const maxCalcWidth = cardW - innerPad * 2;
 
-          // Card 1: Gross Income
+          // Card 1: Gross Income (Green Border)
           const c1X = marginX;
-          drawRoundedRect(ctx, c1X, cardY, cardW, cardH, 2.0, '#f0fdf4', '#86efac', 0.5);
+          drawRoundedRect(ctx, c1X, cardY, cardW, cardH, 2.0, '#f0fdf4', '#86efac', 0.45);
           drawFittedText(
             ctx,
             isBangla ? 'মোট আয় (GROSS INCOME)' : 'GROSS INCOME (৳)',
             c1X + cardW / 2,
-            cardY + 5.2,
+            cardY + 5.0,
             maxCalcWidth,
-            3.5,
-            2.5,
+            3.4,
+            2.4,
             '#065f46',
             '800',
             'center'
@@ -542,9 +544,9 @@ export function downloadLedgerPDF({
             ctx,
             formatCurrency(totals.income, '৳'),
             c1X + cardW / 2,
-            cardY + 12.6,
+            cardY + 12.2,
             maxCalcWidth,
-            5.5,
+            5.3,
             3.2,
             '#064e3b',
             '800',
@@ -555,26 +557,26 @@ export function downloadLedgerPDF({
             ctx,
             isBangla ? `${totals.entryCount} দিনের মোট জমা` : `${totals.entryCount} Days Total Revenue`,
             c1X + cardW / 2,
-            cardY + 19.3,
+            cardY + 18.5,
             maxCalcWidth,
-            3.2,
-            2.3,
+            3.1,
+            2.2,
             '#047857',
             '700',
             'center'
           );
 
-          // Card 2: Fuel & Direct Costs (Red Color for Expense)
+          // Card 2: Fuel & Direct Costs (Red Border)
           const c2X = marginX + (cardW + gap);
-          drawRoundedRect(ctx, c2X, cardY, cardW, cardH, 2.0, '#fef2f2', '#fca5a5', 0.5);
+          drawRoundedRect(ctx, c2X, cardY, cardW, cardH, 2.0, '#fef2f2', '#fca5a5', 0.45);
           drawFittedText(
             ctx,
             isBangla ? 'জ্বালানি ও খরচ (COST)' : 'FUEL & COSTS (EXPENSE)',
             c2X + cardW / 2,
-            cardY + 5.2,
+            cardY + 5.0,
             maxCalcWidth,
-            3.5,
-            2.5,
+            3.4,
+            2.4,
             '#991b1b',
             '800',
             'center'
@@ -583,9 +585,9 @@ export function downloadLedgerPDF({
             ctx,
             formatCurrency(totals.cost, '৳'),
             c2X + cardW / 2,
-            cardY + 12.6,
+            cardY + 12.2,
             maxCalcWidth,
-            5.5,
+            5.3,
             3.2,
             '#dc2626',
             '800',
@@ -594,28 +596,28 @@ export function downloadLedgerPDF({
           );
           drawFittedText(
             ctx,
-            isBangla ? 'জ্বালানি ও ইঞ্জিন ব্যয়' : 'Fuel & Direct Operating Cost',
+            isBangla ? 'জ্বালানি ও ইঞ্জিন ব্যয়' : 'Fuel & Operating Cost',
             c2X + cardW / 2,
-            cardY + 19.3,
+            cardY + 18.5,
             maxCalcWidth,
-            3.2,
-            2.3,
+            3.1,
+            2.2,
             '#b91c1c',
             '700',
             'center'
           );
 
-          // Card 3: Other Costs (Red Color for Expense)
+          // Card 3: Other Costs (Red Border)
           const c3X = marginX + (cardW + gap) * 2;
-          drawRoundedRect(ctx, c3X, cardY, cardW, cardH, 2.0, '#fef2f2', '#fca5a5', 0.5);
+          drawRoundedRect(ctx, c3X, cardY, cardW, cardH, 2.0, '#fef2f2', '#fca5a5', 0.45);
           drawFittedText(
             ctx,
             isBangla ? 'অন্যান্য খরচ (OTHER)' : 'OTHER COSTS (EXPENSE)',
             c3X + cardW / 2,
-            cardY + 5.2,
+            cardY + 5.0,
             maxCalcWidth,
-            3.5,
-            2.5,
+            3.4,
+            2.4,
             '#991b1b',
             '800',
             'center'
@@ -624,9 +626,9 @@ export function downloadLedgerPDF({
             ctx,
             formatCurrency(totals.other, '৳'),
             c3X + cardW / 2,
-            cardY + 12.6,
+            cardY + 12.2,
             maxCalcWidth,
-            5.5,
+            5.3,
             3.2,
             '#dc2626',
             '800',
@@ -635,18 +637,18 @@ export function downloadLedgerPDF({
           );
           drawFittedText(
             ctx,
-            isBangla ? 'টোল ও আনুষঙ্গিক ব্যয়' : 'Tolls, Permits & Incidentals',
+            isBangla ? 'টোল ও আনুষঙ্গিক ব্যয়' : 'Tolls, Permits & Extras',
             c3X + cardW / 2,
-            cardY + 19.3,
+            cardY + 18.5,
             maxCalcWidth,
-            3.2,
-            2.3,
+            3.1,
+            2.2,
             '#b91c1c',
             '700',
             'center'
           );
 
-          // Card 4: Net Settlement Balance
+          // Card 4: Net Settlement Balance (Bold Border)
           const isPositive = totals.balance >= 0;
           const c4X = marginX + (cardW + gap) * 3;
           drawRoundedRect(
@@ -658,16 +660,16 @@ export function downloadLedgerPDF({
             2.0,
             isPositive ? '#f1f5f9' : '#fff1f2',
             '#0f172a',
-            0.65
+            0.6
           );
           drawFittedText(
             ctx,
             isBangla ? 'নিট ব্যালেন্স (NET BALANCE)' : 'NET SETTLEMENT (৳)',
             c4X + cardW / 2,
-            cardY + 5.2,
+            cardY + 5.0,
             maxCalcWidth,
-            3.5,
-            2.5,
+            3.4,
+            2.4,
             '#0f172a',
             '800',
             'center'
@@ -676,9 +678,9 @@ export function downloadLedgerPDF({
             ctx,
             formatCurrency(totals.balance, '৳'),
             c4X + cardW / 2,
-            cardY + 12.6,
+            cardY + 12.2,
             maxCalcWidth,
-            5.5,
+            5.3,
             3.2,
             isPositive ? '#047857' : '#dc2626',
             '800',
@@ -695,28 +697,39 @@ export function downloadLedgerPDF({
               ? 'পরিচালন ঘাটতি (Deficit)'
               : 'Operating Deficit',
             c4X + cardW / 2,
-            cardY + 19.3,
+            cardY + 18.5,
             maxCalcWidth,
-            3.2,
-            2.3,
+            3.1,
+            2.2,
             isPositive ? '#334155' : '#be123c',
             '700',
             'center'
           );
 
-          tableStartY = 85;
+          tableStartY = 84;
         }
 
-        // 4. Itemized Ledger Table Header (Large, bold headers)
+        // 4. Itemized Ledger Table Header (With Crisp Clean Borders)
         ctx.fillStyle = '#e2e8f0';
         ctx.fillRect(tableX, tableStartY, tableW, headH);
         ctx.fillStyle = '#fee2e2';
         ctx.fillRect(colX[2], tableStartY, colWidths[2], headH);
         ctx.fillRect(colX[4], tableStartY, colWidths[4], headH);
 
+        // Header outer border
         ctx.strokeStyle = '#475569';
         ctx.lineWidth = 0.45;
         ctx.strokeRect(tableX, tableStartY, tableW, headH);
+
+        // Vertical column dividers in header
+        for (let c = 1; c < 6; c++) {
+          ctx.beginPath();
+          ctx.moveTo(colX[c], tableStartY);
+          ctx.lineTo(colX[c], tableStartY + headH);
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 0.35;
+          ctx.stroke();
+        }
 
         const headers = isBangla
           ? [
@@ -737,15 +750,6 @@ export function downloadLedgerPDF({
             ];
 
         headers.forEach((hText, idx) => {
-          if (idx > 0) {
-            ctx.beginPath();
-            ctx.moveTo(colX[idx], tableStartY);
-            ctx.lineTo(colX[idx], tableStartY + headH);
-            ctx.strokeStyle = '#64748b';
-            ctx.lineWidth = 0.35;
-            ctx.stroke();
-          }
-
           const isExpenseCol = idx === 2 || idx === 4;
           const align: CanvasTextAlign =
             idx === 0 ? 'center' : idx === 3 ? 'left' : 'right';
@@ -762,8 +766,8 @@ export function downloadLedgerPDF({
             textX,
             tableStartY + headH / 2,
             colWidths[idx] - 4,
-            3.8,
-            2.6,
+            3.6,
+            2.5,
             isExpenseCol ? '#991b1b' : '#0f172a',
             '800',
             align
@@ -773,12 +777,13 @@ export function downloadLedgerPDF({
         let currY = tableStartY + headH;
 
         if (pageRows.length === 0) {
-          const emptyH = 22;
+          const emptyH = 20;
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(tableX, currY, tableW, emptyH);
           ctx.strokeStyle = '#cbd5e1';
           ctx.lineWidth = 0.35;
           ctx.strokeRect(tableX, currY, tableW, emptyH);
+
           drawFittedText(
             ctx,
             isBangla
@@ -787,8 +792,8 @@ export function downloadLedgerPDF({
             tableX + tableW / 2,
             currY + emptyH / 2,
             tableW - 10,
-            4.2,
-            3.0,
+            4.0,
+            2.9,
             '#64748b',
             '700',
             'center'
@@ -805,65 +810,69 @@ export function downloadLedgerPDF({
             ctx.fillStyle = rIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
             ctx.fillRect(tableX, currY, tableW, rowH);
 
+            // Row outer border
             ctx.strokeStyle = '#94a3b8';
             ctx.lineWidth = 0.35;
             ctx.strokeRect(tableX, currY, tableW, rowH);
 
+            // Vertical column dividers for each row
             for (let c = 1; c < 6; c++) {
               ctx.beginPath();
               ctx.moveTo(colX[c], currY);
               ctx.lineTo(colX[c], currY + rowH);
+              ctx.strokeStyle = '#cbd5e1';
+              ctx.lineWidth = 0.3;
               ctx.stroke();
             }
 
             const cellMidY = currY + rowH / 2;
 
-            // Col 0: Date (Big, bold font)
+            // Col 0: Date
             drawFittedText(
               ctx,
               formatDisplayDate(r.record_date),
               colX[0] + colWidths[0] / 2,
               cellMidY,
               colWidths[0] - 2.5,
-              3.8,
-              2.6,
+              3.7,
+              2.5,
               '#0f172a',
               '800',
               'center',
               true
             );
 
-            // Col 1: Income (Big bold Green with ৳)
+            // Col 1: Income (Green with ৳)
             drawFittedText(
               ctx,
               formatCurrency(inc, '৳'),
               colX[1] + colWidths[1] - 2.2,
               cellMidY,
               colWidths[1] - 4,
-              4.1,
-              2.7,
+              4.0,
+              2.6,
               '#047857',
               '800',
               'right',
               true
             );
 
-            // Col 2: Cost (Big bold Red with ৳)
+            // Col 2: Cost (Red with ৳)
             drawFittedText(
               ctx,
               formatCurrency(cst, '৳'),
               colX[2] + colWidths[2] - 2.2,
               cellMidY,
               colWidths[2] - 4,
-              4.1,
-              2.7,
+              4.0,
+              2.6,
               '#dc2626',
               '800',
               'right',
               true
             );
 
-            // Col 3: Cost Details (Large, clear multi-line details)
+            // Col 3: Cost Details
             const totalTextBlockH = (detailLines.length - 1) * lineSpacingMm;
             const firstLineY = cellMidY - totalTextBlockH / 2;
 
@@ -875,37 +884,37 @@ export function downloadLedgerPDF({
                 firstLineY + lIdx * lineSpacingMm,
                 colWidths[3] - 4.5,
                 detailFontMm,
-                2.8,
+                2.7,
                 '#0f172a',
                 '700',
                 'left'
               );
             });
 
-            // Col 4: Other Expense (Big bold Red with ৳)
+            // Col 4: Other Expense (Red with ৳)
             drawFittedText(
               ctx,
               formatCurrency(oth, '৳'),
               colX[4] + colWidths[4] - 2.2,
               cellMidY,
               colWidths[4] - 4,
-              4.1,
-              2.7,
+              4.0,
+              2.6,
               '#dc2626',
               '800',
               'right',
               true
             );
 
-            // Col 5: Net Balance (Big bold with ৳)
+            // Col 5: Net Balance
             drawFittedText(
               ctx,
               formatCurrency(net, '৳'),
               colX[5] + colWidths[5] - 2.2,
               cellMidY,
               colWidths[5] - 4,
-              4.1,
-              2.7,
+              4.0,
+              2.6,
               net >= 0 ? '#0f172a' : '#dc2626',
               '800',
               'right',
@@ -916,19 +925,20 @@ export function downloadLedgerPDF({
           });
         }
 
-        // Totals Row on Last Page (Total costing amount hidden from Cost Details bar as requested)
+        // 5. Totals Row: RENDERED STRICTLY ON LAST PAGE ONLY
         if (pageIdx === totalPages - 1) {
-          const footH = 12.5;
           ctx.fillStyle = '#e2e8f0';
           ctx.fillRect(tableX, currY, tableW, footH);
           ctx.fillStyle = '#fee2e2';
           ctx.fillRect(colX[2], currY, colWidths[2], footH);
           ctx.fillRect(colX[4], currY, colWidths[4], footH);
 
+          // Totals outer border
           ctx.strokeStyle = '#0f172a';
           ctx.lineWidth = 0.6;
           ctx.strokeRect(tableX, currY, tableW, footH);
 
+          // Totals vertical dividers
           for (let c = 1; c < 6; c++) {
             ctx.beginPath();
             ctx.moveTo(colX[c], currY);
@@ -944,8 +954,8 @@ export function downloadLedgerPDF({
             colX[0] + colWidths[0] / 2,
             currY + footH / 2,
             colWidths[0] - 2,
-            3.8,
-            2.6,
+            3.7,
+            2.5,
             '#0f172a',
             '800',
             'center'
@@ -957,8 +967,8 @@ export function downloadLedgerPDF({
             colX[1] + colWidths[1] - 2.2,
             currY + footH / 2,
             colWidths[1] - 4,
-            4.3,
-            2.8,
+            4.2,
+            2.7,
             '#065f46',
             '800',
             'right',
@@ -971,23 +981,23 @@ export function downloadLedgerPDF({
             colX[2] + colWidths[2] - 2.2,
             currY + footH / 2,
             colWidths[2] - 4,
-            4.3,
-            2.8,
+            4.2,
+            2.7,
             '#dc2626',
             '800',
             'right',
             true
           );
 
-          // Cost Details footer cell: total costing hidden/removed as requested
+          // Cost Details footer cell: clear placeholder
           drawFittedText(
             ctx,
             '—',
             colX[3] + colWidths[3] / 2,
             currY + footH / 2,
             colWidths[3] - 4,
-            3.6,
-            2.5,
+            3.5,
+            2.4,
             '#94a3b8',
             '700',
             'center'
@@ -999,8 +1009,8 @@ export function downloadLedgerPDF({
             colX[4] + colWidths[4] - 2.2,
             currY + footH / 2,
             colWidths[4] - 4,
-            4.3,
-            2.8,
+            4.2,
+            2.7,
             '#dc2626',
             '800',
             'right',
@@ -1013,8 +1023,8 @@ export function downloadLedgerPDF({
             colX[5] + colWidths[5] - 2.2,
             currY + footH / 2,
             colWidths[5] - 4,
-            4.3,
-            2.8,
+            4.2,
+            2.7,
             totals.balance >= 0 ? '#047857' : '#dc2626',
             '800',
             'right',
@@ -1022,10 +1032,10 @@ export function downloadLedgerPDF({
           );
         }
 
-        // 5. Page Footer (Bigger, clearer footer text)
+        // 6. Page Footer
         ctx.beginPath();
-        ctx.moveTo(marginX, pageHeight - 12);
-        ctx.lineTo(pageWidth - marginX, pageHeight - 12);
+        ctx.moveTo(marginX, pageHeight - 11);
+        ctx.lineTo(pageWidth - marginX, pageHeight - 11);
         ctx.strokeStyle = '#94a3b8';
         ctx.lineWidth = 0.35;
         ctx.stroke();
@@ -1034,11 +1044,11 @@ export function downloadLedgerPDF({
           ctx,
           `FLEET-LEDGER Enterprise · ${isBangla ? 'অফিসিয়াল হিসাব বিবরণী' : 'Official Settlement Document'} — Page ${pageIdx + 1} of ${totalPages}`,
           marginX,
-          pageHeight - 6.5,
+          pageHeight - 6.0,
           104,
-          3.4,
-          2.4,
-          '#334155',
+          3.3,
+          2.3,
+          '#475569',
           '700',
           'left'
         );
@@ -1047,11 +1057,11 @@ export function downloadLedgerPDF({
           ctx,
           `Log in Number: ${profile.vehicle_number}${profile.vehicle_register_number ? ` (Reg: ${profile.vehicle_register_number})` : ''} | Driver: ${profile.name}`,
           pageWidth - marginX,
-          pageHeight - 6.5,
+          pageHeight - 6.0,
           90,
-          3.4,
-          2.4,
-          '#334155',
+          3.3,
+          2.3,
+          '#475569',
           '700',
           'right'
         );
@@ -1060,19 +1070,61 @@ export function downloadLedgerPDF({
         doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
       });
 
+      if (autoPrint) {
+        try {
+          doc.autoPrint();
+        } catch (e) {
+          console.warn('doc.autoPrint not supported:', e);
+        }
+      }
+
       const cleanVehicle = (profile.vehicle_number || 'vehicle').replace(
         /[^a-zA-Z0-9_-]/g,
         '_'
       );
-      const filename = `FLEET-LEDGER_${cleanVehicle}_${from}_to_${to}.pdf`;
+      const prefix = autoPrint ? 'FLEET-LEDGER_Print_A4' : 'FLEET-LEDGER';
+      const filename = `${prefix}_${cleanVehicle}_${from}_to_${to}.pdf`;
       doc.save(filename);
+
+      // In supported desktop browsers, also trigger print via blob iframe
+      if (autoPrint && typeof window !== 'undefined') {
+        try {
+          const blob = doc.output('blob');
+          const blobUrl = URL.createObjectURL(blob);
+          const printFrame = document.createElement('iframe');
+          printFrame.style.position = 'fixed';
+          printFrame.style.right = '0';
+          printFrame.style.bottom = '0';
+          printFrame.style.width = '0';
+          printFrame.style.height = '0';
+          printFrame.style.border = '0';
+          printFrame.src = blobUrl;
+          document.body.appendChild(printFrame);
+          setTimeout(() => {
+            try {
+              printFrame.contentWindow?.focus();
+              printFrame.contentWindow?.print();
+            } catch (err) {
+              console.warn('Iframe print error:', err);
+            }
+          }, 350);
+        } catch (err) {
+          console.warn('Iframe blob print error:', err);
+        }
+      }
+
       return true;
     }
 
     // Fallback if Canvas 2D is unavailable
+    if (autoPrint) {
+      try {
+        doc.autoPrint();
+      } catch {}
+    }
     autoTable(doc, {
-      styles: { fontSize: 11, cellPadding: 3 },
-      headStyles: { fontSize: 11, fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 3 },
+      headStyles: { fontSize: 10, fontStyle: 'bold', fillColor: [226, 232, 240], textColor: [15, 23, 42] },
       head: [['Date', 'Income (Tk)', 'Cost (Tk)', 'Cost Details', 'Other (Tk)', 'Balance (Tk)']],
       body: records.map(r => [
         formatDisplayDate(r.record_date),
@@ -1092,4 +1144,8 @@ export function downloadLedgerPDF({
     } catch {}
     return false;
   }
+}
+
+export function printLedgerPDF(options: Omit<PDFExportOptions, 'autoPrint'>): boolean {
+  return downloadLedgerPDF({ ...options, autoPrint: true });
 }
